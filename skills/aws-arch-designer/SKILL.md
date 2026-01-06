@@ -17,11 +17,87 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 
 ## 工作流程
 
-此 Skill 遵循严格的 4 步流程，**不可跳过或合并**：
+此 Skill 遵循严格的 **5 步流程**，**不可跳过或合并**：
+
+### 步骤 0: 案例学习文件识别（可选但推荐）
+
+**功能**: 自动识别和参考案例学习文件
+
+**何时触发**:
+- 用户提供包含"案例"、"case study"、"项目背景"、"痛点"、"解决方案"等关键词的文档
+
+**执行任务**:
+
+1. **自动检测案例文件**:
+   使用 `scripts/case_study_analyzer.py` 中的 `CaseStudyDetector`
+   - 文件名模式识别（case study、案例、迁移方案等）
+   - 内容关键词识别（20+ 中英文关键词）
+   - 自动判定文件是否为案例学习文件
+
+2. **结构化信息提取**:
+   从案例文件中提取：
+   - **项目背景**: 行业、公司规模、现状基础设施
+   - **痛点分析**: 问题描述、影响、严重程度
+   - **AWS 解决方案**: 服务组合、架构模式、配置
+   - **关键指标**: 可用性、性能、流量、数据量
+   - **预期收益**: 成本节省、性能提升、业务影响
+   - **经验教训**: 关键经验和最佳实践
+   - **架构图**: 自动检测（Markdown 和 HTML 格式）
+
+3. **与新项目进行相关性匹配**:
+   使用 `CaseStudyMatcher` 计算相关性分数（0-100）
+   - 行业相似性 (30 分)
+   - 公司规模相似性 (20 分)
+   - 痛点相似性 (30 分)
+   - 功能需求相似性 (20 分)
+   - 架构模式一致性 (bonus 10 分)
+
+   相关性等级：
+   - **High (≥70)**: 强烈推荐参考，可直接采用案例的架构模式
+   - **Medium (40-69)**: 部分参考价值，某些服务和经验可复用
+   - **Low (<40)**: 参考价值有限
+
+4. **提取可复用资源**:
+   - 验证过的 AWS 服务组合
+   - 成本基线数据
+   - 关键经验教训
+   - 风险规避建议
+
+**输出结构**:
+```json
+{
+  "is_case_study": true,
+  "case_study_metadata": {
+    "title": "项目标题",
+    "industry": "行业",
+    "company_scale": "公司规模"
+  },
+  "pain_points": [...],
+  "aws_solution": {...},
+  "key_metrics": {...},
+  "expected_benefits": {...},
+  "lessons_learned": [...],
+  "match_with_new_project": {
+    "relevance_score": 85,
+    "relevance_level": "high",
+    "reusable_services": [...],
+    "recommendations": [...]
+  }
+}
+```
+
+**关键原则**:
+- ✅ 相似案例可加速架构决策
+- ✅ 从案例中提取验证过的最佳实践
+- ✅ 吸取案例的经验教训规避风险
+- ✅ 基于案例的成本数据进行预算规划
+- ❌ 不要盲目复制，需要考虑新项目的特殊约束
+
+---
 
 ### 步骤 1: Material Parser (材料解析)
 
-**目标**: 从零散材料中提取结构化需求信息
+**目标**: 从零散材料中提取结构化需求信息，检测是否为案例学习文件
 
 **输入材料可能是**:
 - 会议记录（散乱的讨论要点）
@@ -29,6 +105,8 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 - 代码片段（现有系统实现参考）
 - Word/Excel 文档
 - 混合形式的文本
+- **案例学习文件**（包含背景、痛点、方案、架构图、收益）
+- **架构图**（用户上传的 PNG/PDF/JPEG）
 
 **执行任务**:
 
@@ -39,22 +117,27 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
    - 预算限制：月度/年度预算上限
    - 预估流量：DAU、QPS、数据量、峰值倍数
 
-2. **识别项目类型**:
+2. **检测案例学习文件**:
+   使用 `scripts/case_study_analyzer.py` 中的 `CaseStudyDetector`
+   - 如果检测到案例文件，触发步骤 0 的案例分析流程
+   - 提取案例中的关键信息用于参考和决策
+
+3. **识别项目类型**:
    使用 `scripts/material_parser.py` 中的 `identify_project_type()` 函数
    - AI/ML 项目：GenAI、RAG、Agentic
    - 大数据项目：批处理、实时流、数据湖
    - 传统应用：Web、SaaS、混合云
 
-3. **标注缺失信息**:
+4. **标注缺失信息**:
    识别 P0 关键信息（RTO/RPO、可用性、流量、区域）
 
-4. **生成追问列表**:
+5. **生成追问列表**:
    使用 `scripts/material_parser.py` 中的 `generate_clarification_questions()` 函数
    - 提供选项或参考值（如: "RTO < 4h, RPO < 1h"）
    - 一次最多 3-5 个问题
    - 使用易于理解的语言
 
-5. **输出结构化 JSON**:
+6. **输出结构化 JSON**:
    ```json
    {
      "business_goals": [...],
@@ -79,15 +162,110 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 
 ---
 
-### 步骤 2: Architecture Decisioning (架构决策)
+### 步骤 2: Architecture Diagram Generation (架构图生成与验证)
 
-**目标**: 基于结构化需求进行服务选型和 WAF 评估
+**目标**: 获取或生成架构图，并验证其与需求的匹配度
 
-**前置条件**: 步骤 1 已完成，且所有 P0 问题已得到回答
+**前置条件**: 步骤 1 已完成，所有 P0 信息已确认
+
+**处理两种情况**:
+
+#### 情况 1: 用户提供了架构图（PNG/PDF/JPEG）
 
 **执行任务**:
 
-#### 任务 2.1: 选择架构模式
+1. **检测和识别架构图**:
+   使用 `scripts/diagram_generator.py` 中的 `DiagramGenerator.detect_user_diagram()`
+   - 识别图片中的 AWS 服务图标
+   - 提取架构图中的数据流和连接关系
+   - 识别关键配置（Multi-AZ、Auto Scaling 等）
+
+2. **生成架构图文字描述**:
+   使用 `DiagramDescriptionGenerator.generate_from_blueprint()`
+   - 生成 Markdown 格式的架构描述
+   - 用于后续的 Design Writer 阶段
+
+3. **验证架构图与需求的匹配度**:
+   使用 `DiagramValidator` 进行一致性检查：
+   - ✅ **服务完整性检查**: 架构图中的服务是否包含所有关键服务
+   - ✅ **Multi-AZ 部署检查**: 生产环境是否明确 Multi-AZ 配置
+   - ✅ **连接关系检查**: 服务间连接是否有效和正确
+   - ✅ **配置一致性检查**: 关键参数是否与需求匹配
+
+4. **输出**:
+```json
+{
+  "diagram_source": "user_provided",
+  "detected_services": ["ALB", "EC2", "RDS", "S3"],
+  "diagram_text_description": "架构图文字描述...",
+  "consistency_check": {
+    "service_completeness": "✅ Pass",
+    "multi_az_deployment": "✅ Pass",
+    "connection_validity": "✅ Pass",
+    "issues": []
+  }
+}
+```
+
+#### 情况 2: 用户未提供架构图
+
+**执行任务**:
+
+1. **构建架构蓝图**:
+   使用 `scripts/diagram_generator.py` 中的 `BlueprintBuilder`
+   基于步骤 1 的结构化需求构建蓝图，包括：
+   - 计算层服务（EC2、Lambda、Fargate 等）
+   - 数据库服务（RDS、DynamoDB、Aurora 等）
+   - 缓存服务（ElastiCache 等）
+   - 存储服务（S3 等）
+   - 负载均衡（ALB、NLB 等）
+   - 服务间连接关系
+
+2. **调用 MCP Server 生成架构图**:
+   使用 `scripts/mcp_diagram_client.py` 中的 `MCPDiagramClient`
+   - 连接到 `awslabs-aws-diagram-mcp-server`
+   - 传入架构蓝图
+   - 返回 PNG/SVG 格式的架构图
+
+3. **生成架构图文字描述**:
+   与情况 1 相同
+
+4. **进行一致性验证**:
+   与情况 1 相同的 4 项检查
+
+5. **降级方案**:
+   如果 MCP Server 不可用，使用纯文本描述架构而不生成图片
+
+**输出**:
+```json
+{
+  "diagram_source": "auto_generated",
+  "diagram_file": "/tmp/architecture.png",
+  "diagram_format": "PNG",
+  "services": [...],
+  "connections": [...],
+  "diagram_text_description": "架构图文字描述...",
+  "consistency_check": {...}
+}
+```
+
+**关键原则**:
+- ✅ 所有设计最终都应有对应的架构图表示
+- ✅ 架构图和设计文档必须保持一致
+- ✅ 检查清单必须全部通过
+- ❌ 如果一致性检查失败，返回步骤 1 重新分析需求
+
+---
+
+### 步骤 4: Architecture Decisioning (架构决策)
+
+**目标**: 基于结构化需求进行服务选型和 WAF 评估
+
+**前置条件**: 步骤 1 已完成，且所有 P0 问题已得到回答，架构图已处理
+
+**执行任务**:
+
+#### 任务 3.1: 选择架构模式
 
 根据项目类型从 `references/architecture_patterns.md` 中选择匹配的架构模式。
 
@@ -111,7 +289,7 @@ else:
     pattern = "Web 三层架构"
 ```
 
-#### 任务 2.2: 服务选型决策
+#### 任务 3.2: 服务选型决策
 
 对于每个需求维度（计算、存储、数据库、网络、缓存等），执行以下步骤：
 
@@ -155,7 +333,7 @@ else:
 }
 ```
 
-#### 任务 2.3: AWS Well-Architected Framework 检查
+#### 任务 3.3: AWS Well-Architected Framework 检查
 
 **CRITICAL**: 必须对每个架构设计逐一进行 WAF 六大支柱检查。
 
@@ -180,7 +358,7 @@ else:
 }
 ```
 
-#### 任务 2.4: AI/ML 与大数据项目特殊处理
+#### 任务 3.4: AI/ML 与大数据项目特殊处理
 
 **如果项目类型为 AI/ML**:
 
@@ -239,7 +417,7 @@ else:
    }
    ```
 
-#### 任务 2.5: Region / China 特判
+#### 任务 3.5: Region / China 特判
 
 - 若 `region = "AWS China"`，检查是否使用了不可用服务
 - 输出服务可用性检查结果
@@ -277,11 +455,11 @@ else:
 
 ---
 
-### 步骤 3: Design Writer (文档生成)
+### 步骤 4: Design Writer (文档生成)
 
 **目标**: 按固定模板生成架构设计说明书
 
-**前置条件**: 步骤 2 已完成，所有服务选型和 WAF 评估已完成
+**前置条件**: 步骤 2 已完成，架构图已获取或生成，所有服务选型和 WAF 评估已完成
 
 **执行任务**:
 
@@ -322,7 +500,7 @@ else:
 
 ---
 
-### 步骤 4: Design Reviewer (设计审查)
+### 步骤 5: Design Reviewer (设计审查)
 
 **目标**: 检查架构设计的完整性和正确性
 
@@ -477,6 +655,85 @@ else:
 
 ---
 
+### 示例 3: 基于案例学习的快速设计
+
+**用户输入**（包含案例文件 + 新项目需求）:
+```
+案例文件: 电商平台云迁移案例.md
+新需求: 我们的电商平台与案例中的项目类似，
+想基于案例的设计进行定制化调整
+```
+
+**步骤 0 输出**（案例分析）:
+```json
+{
+  "is_case_study": true,
+  "case_study_metadata": {
+    "title": "电商平台云迁移案例",
+    "industry": "电商"
+  },
+  "pain_points": [
+    "高运维成本(年150万)",
+    "扩展困难(高峰流量翻倍)",
+    "可用性低(仅95%)"
+  ],
+  "aws_solution": {
+    "pattern": "Web 三层架构",
+    "services": ["ALB", "EC2 ASG", "RDS MySQL", "S3", "ElastiCache"]
+  },
+  "expected_benefits": {
+    "cost_savings": "60万/年(40%)",
+    "performance": "响应时间提升70%"
+  },
+  "match_with_new_project": {
+    "relevance_score": 85,
+    "relevance_level": "high",
+    "reusable_services": [
+      {"name": "EC2 ASG", "role": "计算"},
+      {"name": "RDS MySQL", "role": "数据库"},
+      {"name": "ALB", "role": "负载均衡"}
+    ],
+    "recommendations": [
+      "强烈推荐采用相同的 Web 三层架构",
+      "建议同样考虑 Multi-AZ 部署提升可用性",
+      "重点关注数据库迁移和缓存策略"
+    ]
+  }
+}
+```
+
+**步骤 1 输出**（需求提取）:
+```json
+{
+  "project_type": "Web-Application",
+  "business_goals": ["云迁移", "成本优化"],
+  "functional_requirements": ["电商平台", "订单处理"],
+  "non_functional_requirements": {
+    "availability": "99.9%",
+    "rto": "< 4h"
+  },
+  "case_study_reference": {
+    "is_referenced": true,
+    "similarity_score": 85,
+    "suggested_architecture": "Web 三层架构",
+    "suggested_services": ["EC2 ASG", "RDS", "ALB"]
+  }
+}
+```
+
+**后续步骤**:
+- 步骤 2: 使用案例中的架构图或生成相似架构图
+- 步骤 3: 基于案例的服务组合进行决策（减少分析时间）
+- 步骤 4: 生成针对新项目的定制化设计文档
+- 步骤 5: 验证设计的完整性和合规性
+
+**优势**:
+- 减少 50% 的架构设计时间
+- 基于验证过的最佳实践规避风险
+- 更准确的成本预算和时间规划
+
+---
+
 ## 参考资料
 
 详细的架构模式和检查清单请参考：
@@ -488,9 +745,41 @@ else:
 
 ## 重要提示
 
-1. **严格遵循 4 步流程**: 不可跳过或合并步骤
+1. **严格遵循 5 步流程**: 不可跳过或合并步骤
+   - 步骤 0: 案例学习文件识别（可选但推荐）
+   - 步骤 1: Material Parser（需求清洗）
+   - 步骤 2: Architecture Diagram Generation（架构图）
+   - 步骤 3: Architecture Decisioning（架构决策）
+   - 步骤 4: Design Writer（文档生成）
+   - 步骤 5: Design Reviewer（质量审核）
+
 2. **主动追问**: 发现缺失的 P0 信息必须追问
-3. **WAF 检查是强制的**: 不可跳过任何支柱的评估
-4. **防止过度设计**: 优先选择最简单可满足需求的方案
-5. **记录所有决策理由**: 每个技术选择都要有 Why 和 Trade-off
-6. **明确标注假设**: 所有基于假设的内容必须标注
+   - RTO/RPO、可用性要求、流量估算、AWS 区域
+
+3. **案例参考**: 优先识别和参考相关案例
+   - 相似案例可加速决策 50%
+   - 吸取经验教训规避风险
+   - 基于案例的成本数据进行预算规划
+
+4. **架构图验证**: 架构图与设计文档必须一致
+   - 服务完整性检查
+   - Multi-AZ 部署检查
+   - 连接关系有效性检查
+   - 如果检查失败，返回步骤 1 重新分析
+
+5. **WAF 检查是强制的**: 不可跳过任何支柱的评估
+   - 特别注意 AI/ML 和大数据项目的特殊要求
+
+6. **防止过度设计**: 优先选择最简单可满足需求的方案
+   - 无需求不上 EKS、Service Mesh、Multi-Region
+
+7. **记录所有决策理由**: 每个技术选择都要有 Why 和 Trade-off
+   - 包括架构模式选择、服务选型、配置决策
+
+8. **明确标注假设**: 所有基于假设的内容必须标注
+   - 特别是在信息不足的情况下
+
+9. **架构图一致性**: 确保所有设计都有对应的可视化表示
+   - 用户提供的图 → 验证和标注
+   - 自动生成的图 → MCP Server 集成
+   - 降级方案 → 纯文本描述
