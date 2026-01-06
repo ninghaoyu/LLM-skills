@@ -48,7 +48,7 @@
 
 ## 二、技术架构设计
 
-### 2.1 整体流程(4-Step Pipeline)
+### 2.1 整体流程(5-Step Pipeline)
 
 这是一个**多步骤 Skill**,而非单一 Prompt。
 
@@ -56,6 +56,7 @@
 ┌────────────────────────┐
 │  用户输入零散材料        │
 │ (会议记录/需求列表/代码) │
+│ (可能含有架构图,可能无)   │
 └──────┬─────────────────┘
        ↓
 ┌──────────────────────────────┐
@@ -67,13 +68,27 @@
 │   • 合规性要求                 │
 │   • 预算限制                   │
 │   • 预估流量                   │
+│ - 检测用户是否提供架构图         │
 │ - 标注缺失信息                 │
 │ - 主动追问(RTO/RPO/峰值等)     │
 │ - 输出结构化 JSON              │
 └──────┬────────────────────────┘
        ↓ (结构化数据)
 ┌──────────────────────────────┐
-│ ② Architecture Decisioning    │ ← LLM + WAF + Rules
+│ ② Architecture Diagram Gen    │ ← MCP + AWS Diagram Server
+│ - 检查是否有用户提供的架构图     │
+│ - 若无提供:                   │
+│   • 基于结构化需求调用 MCP      │
+│   • 使用 aws-diagram-mcp-server │
+│   • 自动生成架构图              │
+│ - 若有提供:                   │
+│   • 验证架构图与需求的匹配度    │
+│   • 识别架构图中的 AWS 服务     │
+│ - 输出架构图(PNG/SVG) + 描述   │
+└──────┬────────────────────────┘
+       ↓ (架构图 + 需求数据)
+┌──────────────────────────────┐
+│ ③ Architecture Decisioning    │ ← LLM + WAF + Rules
 │ - 服务选型决策树                │
 │   • 需求 → 候选服务列表          │
 │   • 约束筛选                   │
@@ -87,17 +102,19 @@
 └──────┬────────────────────────┘
        ↓ (设计蓝图 + WAF 评估)
 ┌──────────────────────────┐
-│ ③ Design Writer           │ ← LLM
+│ ④ Design Writer           │ ← LLM
 │ - 按固定模板生成说明书       │
 │ - 强制章节完整性            │
+│ - 整合架构图信息            │
 │ - 输出 Markdown 文档        │
 └──────┬────────────────────┘
        ↓
 ┌──────────────────────────┐
-│ ④ Design Reviewer         │ ← LLM (Critic Role)
+│ ⑤ Design Reviewer         │ ← LLM (Critic Role)
 │ - AWS Best Practice 检查   │
 │ - 自相矛盾检查              │
 │ - 缺失章节检查              │
+│ - 架构图与文档一致性检查     │
 │ - 输出问题清单与修订建议     │
 └──────────────────────────┘
 ```
@@ -106,6 +123,198 @@
 - **结构化优先**: 所有步骤基于结构化数据,不依赖自然语言传递
 - **模式化设计**: 使用预定义架构模式,避免 LLM 自由发挥
 - **强制检查**: Reviewer 环节必须执行,确保输出质量
+- **架构图驱动**: 优先使用用户提供的架构图; 若无提供则主动绘制, 确保视觉化表示
+
+---
+
+## 二-A、Architecture Diagram Generation - 架构图生成能力
+
+### 2.A.1 输入类型与处理策略
+
+#### Case 1: 用户提供了架构图(图片/PDF)
+**处理流程:**
+```
+用户提供的架构图
+    ↓
+使用 Vision/OCR 识别架构图内容
+    ↓
+提取架构中的 AWS 服务和连接关系
+    ↓
+生成架构图的文字描述(用于后续设计文档)
+    ↓
+验证架构图与提取的需求的匹配度
+```
+
+**识别能力要求:**
+- ✅ 识别标准 AWS 服务图标(EC2, RDS, Lambda, S3 等)
+- ✅ 识别架构图中的数据流和依赖关系
+- ✅ 提取关键配置信息(如 Multi-AZ, Auto Scaling 等)
+- ✅ 输出架构图文字描述(用于生成说明书的"总体架构概述"章节)
+
+**输出结构:**
+```json
+{
+  "architecture_diagram_source": "user_provided",
+  "detected_services": [
+    "Amazon EC2",
+    "Amazon RDS",
+    "Amazon S3",
+    "Application Load Balancer"
+  ],
+  "detected_relationships": [
+    {"source": "ALB", "target": "EC2", "type": "forward_traffic"},
+    {"source": "EC2", "target": "RDS", "type": "query"}
+  ],
+  "diagram_text_description": "用户提供的架构图展示了一个三层架构...",
+  "compatibility_check": {
+    "matches_requirements": true,
+    "notes": "架构图与需求基本匹配,但未明确显示备份策略"
+  }
+}
+```
+
+#### Case 2: 用户未提供架构图(仅有需求描述)
+**处理流程:**
+```
+结构化需求数据
+    ↓
+基于需求和架构模式决策
+    ↓
+构建架构蓝图(服务、连接、配置)
+    ↓
+调用 MCP Server: aws-diagram-mcp-server
+    ↓
+自动生成架构图(PNG/SVG)
+    ↓
+生成架构图的文字描述
+    ↓
+输出架构图文件 + 描述
+```
+
+**MCP Server 集成:**
+- **Server 名称**: `awslabs-aws-diagram-mcp-server`
+- **功能**: 基于架构蓝图自动生成 AWS 架构图
+- **输入**:
+  ```json
+  {
+    "services": [
+      {"name": "ALB", "type": "Application Load Balancer"},
+      {"name": "EC2", "type": "EC2 Auto Scaling Group"},
+      {"name": "RDS", "type": "RDS Multi-AZ"}
+    ],
+    "connections": [
+      {"from": "ALB", "to": "EC2", "label": "HTTP/HTTPS"},
+      {"from": "EC2", "to": "RDS", "label": "TCP 3306"}
+    ],
+    "configuration": {
+      "style": "AWS standard",
+      "layout": "multi-tier"
+    }
+  }
+  ```
+- **输出**: PNG/SVG 架构图文件
+
+**输出结构:**
+```json
+{
+  "architecture_diagram_source": "auto_generated",
+  "generation_method": "awslabs-aws-diagram-mcp-server",
+  "diagram_file": "/path/to/architecture_diagram.png",
+  "diagram_services": [
+    "Amazon EC2",
+    "Amazon RDS",
+    "Amazon S3",
+    "Application Load Balancer"
+  ],
+  "diagram_relationships": [
+    {"source": "ALB", "target": "EC2", "type": "forward_traffic"},
+    {"source": "EC2", "target": "RDS", "type": "query"}
+  ],
+  "diagram_text_description": "生成的架构图展示了一个标准的三层 Web 应用...",
+  "assumptions": [
+    "假设 EC2 实例部署在 Multiple Availability Zones",
+    "假设使用 RDS Multi-AZ 实现高可用"
+  ]
+}
+```
+
+### 2.A.2 架构图与需求的一致性检查
+
+**Checker 职责:**
+1. **服务完整性检查**
+   - 架构图中的 AWS 服务是否包含了设计阶段确定的全部服务?
+   - 是否有多余或不必要的服务?
+
+2. **设计原则一致性检查**
+   - 架构图是否体现了 Multi-AZ 部署(生产环境)?
+   - 架构图是否明确显示了负载均衡、缓存、备份等关键组件?
+
+3. **需求满足性检查**
+   - 架构图是否支持指定的可用性需求(99.9% / 99.99%)?
+   - 架构图是否支持预估的流量规模?
+
+**输出结构:**
+```json
+{
+  "consistency_check": {
+    "service_completeness": {
+      "status": "✅ Pass",
+      "details": "所有关键服务均已包含"
+    },
+    "design_principles": {
+      "status": "⚠️ Warning",
+      "details": "架构图未明确显示备份和灾备策略"
+    },
+    "requirements_coverage": {
+      "status": "✅ Pass",
+      "details": "架构支持 99.9% 可用性和 500 QPS 流量"
+    }
+  },
+  "recommendations": [
+    "建议在架构图中明确标注 AWS Backup 配置",
+    "建议标注 RTO/RPO 目标"
+  ]
+}
+```
+
+### 2.A.3 架构图的文字描述生成
+
+**目的**: 将架构图转化为可写入设计说明书"总体架构概述"章节的文字描述
+
+**输出示例:**
+```markdown
+## 3. 总体架构概述
+
+### 3.1 架构风格
+采用**三层架构模式**,包括:
+- **Presentation Layer(表现层)**: Application Load Balancer(ALB)
+- **Business Logic Layer(业务层)**: EC2 Auto Scaling Group
+- **Data Layer(数据层)**: Amazon RDS Multi-AZ
+
+### 3.2 核心组件概览
+1. **负载均衡**: Application Load Balancer
+   - 分发 HTTP/HTTPS 流量到 EC2 实例
+   - 支持跨 AZ 部署
+
+2. **计算层**: EC2 Auto Scaling Group
+   - 运行应用程序
+   - 基于 CPU 和网络利用率自动扩展
+   - 部署在 Public/Private 子网
+
+3. **数据库**: Amazon RDS for MySQL Multi-AZ
+   - 主从数据库部署在不同 AZ
+   - 支持自动故障转移
+
+4. **对象存储**: Amazon S3
+   - 存储静态资源和备份
+
+### 3.3 架构图文字描述
+[此处插入架构图 PNG/SVG]
+
+用户请求首先到达 Application Load Balancer,由 ALB 根据规则将请求转发到 EC2 Auto Scaling Group 中的实例。EC2 实例运行应用逻辑,通过 RDS 数据库连接查询数据。所有静态资源和备份文件存储在 S3 中。
+
+整个架构跨越两个可用区(Multi-AZ),当一个 AZ 发生故障时,其他 AZ 可自动接管流量,从而实现 99.9% 的可用性。
+```
 
 ---
 
@@ -1190,6 +1399,264 @@ def architecture_decisioning(requirements):
 
 在 Reviewer 阶段强制检查,若违反则拒绝输出。
 
+### 6.4 Architecture Diagram Generation 执行要点
+
+#### 6.4.1 MCP Server 集成工作流
+
+**目标:** 当用户未提供架构图时,自动调用 MCP Server 绘制架构图
+
+**集成步骤:**
+
+1. **检测架构图的有无(Material Parser 阶段)**
+   ```python
+   def detect_diagram_presence(user_input):
+       """检测用户是否上传了架构图"""
+       if user_input.contains("image") or user_input.contains("diagram"):
+           return {
+               "has_diagram": True,
+               "diagram_type": detect_image_type(user_input),  # 检查是 PNG/PDF/JPEG 等
+               "diagram_file": extract_file_path(user_input)
+           }
+       else:
+           return {
+               "has_diagram": False,
+               "diagram_type": None,
+               "diagram_file": None
+           }
+   ```
+
+2. **Case 1: 用户提供了架构图**
+   - ✅ 使用 Vision API 或 OCR 识别架构图内容
+   - ✅ 提取 AWS 服务和连接关系
+   - ✅ 生成文字描述
+   - ✅ 验证与需求的匹配度
+
+3. **Case 2: 用户未提供架构图**
+   - ① 基于"Architecture Decisioning"阶段的结果构建**架构蓝图**(服务列表 + 连接关系)
+   - ② **调用 MCP Server**: `awslabs-aws-diagram-mcp-server`
+   - ③ 传入架构蓝图(JSON 格式)
+   - ④ 返回生成的架构图文件(PNG/SVG)
+   - ⑤ 生成架构图的文字描述
+   - ⑥ 整合到设计文档中
+
+**调用 MCP Server 的 Prompt 示例:**
+```markdown
+你需要使用 AWS Diagram MCP Server 生成一份 AWS 架构图。
+
+【输入的架构蓝图】
+```json
+{
+  "architecture_pattern": "Web 三层架构",
+  "services": [
+    {
+      "name": "ALB",
+      "type": "Application Load Balancer",
+      "region": "us-east-1",
+      "multi_az": true
+    },
+    {
+      "name": "EC2-ASG",
+      "type": "EC2 Auto Scaling Group",
+      "region": "us-east-1",
+      "multi_az": true,
+      "instance_type": "t3.medium"
+    },
+    {
+      "name": "RDS-MySQL",
+      "type": "RDS for MySQL",
+      "region": "us-east-1",
+      "multi_az": true,
+      "storage": "200GB"
+    },
+    {
+      "name": "S3",
+      "type": "S3 Bucket",
+      "region": "us-east-1"
+    }
+  ],
+  "connections": [
+    {
+      "from": "ALB",
+      "to": "EC2-ASG",
+      "label": "HTTP/HTTPS",
+      "protocol": "TCP 80/443"
+    },
+    {
+      "from": "EC2-ASG",
+      "to": "RDS-MySQL",
+      "label": "SQL Query",
+      "protocol": "TCP 3306"
+    },
+    {
+      "from": "EC2-ASG",
+      "to": "S3",
+      "label": "Object Store",
+      "protocol": "HTTPS"
+    }
+  ],
+  "network_config": {
+    "vpc": {
+      "cidr": "10.0.0.0/16",
+      "multi_az": true,
+      "subnets": [
+        {"name": "Public-1a", "tier": "public", "cidr": "10.0.1.0/24"},
+        {"name": "Public-1b", "tier": "public", "cidr": "10.0.2.0/24"},
+        {"name": "Private-1a", "tier": "private", "cidr": "10.0.11.0/24"},
+        {"name": "Private-1b", "tier": "private", "cidr": "10.0.12.0/24"},
+        {"name": "Data-1a", "tier": "data", "cidr": "10.0.21.0/24"},
+        {"name": "Data-1b", "tier": "data", "cidr": "10.0.22.0/24"}
+      ]
+    }
+  }
+}
+```
+
+【你的任务】
+1. 调用 awslabs-aws-diagram-mcp-server 生成架构图
+2. 传入上述架构蓝图 JSON
+3. 生成 PNG 或 SVG 格式的架构图
+4. 返回生成的架构图文件路径
+5. 生成架构图的文字描述(用于设计文档)
+```
+
+#### 6.4.2 架构蓝图构建规则
+
+**在 Architecture Decisioning 阶段,需要构建以下结构:**
+
+```python
+def build_architecture_blueprint(decisions):
+    """基于架构决策构建架构蓝图(用于图生成)"""
+
+    blueprint = {
+        "architecture_pattern": decisions.pattern,  # 如 "Web 三层架构"
+        "services": [],
+        "connections": [],
+        "network_config": {}
+    }
+
+    # 1. 添加计算层服务
+    if decisions.compute == "EC2":
+        blueprint.services.append({
+            "name": "EC2-ASG",
+            "type": "EC2 Auto Scaling Group",
+            "multi_az": decisions.availability > 99.5,
+            "instance_type": decisions.instance_type
+        })
+
+    # 2. 添加数据库服务
+    if decisions.database == "RDS":
+        blueprint.services.append({
+            "name": "RDS-Primary",
+            "type": "RDS for " + decisions.db_engine,
+            "multi_az": decisions.reliability.rds_multi_az,
+            "storage": decisions.storage_size
+        })
+
+    # 3. 添加连接关系
+    if "EC2-ASG" in [s["name"] for s in blueprint.services]:
+        if "RDS-Primary" in [s["name"] for s in blueprint.services]:
+            blueprint.connections.append({
+                "from": "EC2-ASG",
+                "to": "RDS-Primary",
+                "label": "SQL Query",
+                "protocol": f"TCP {decisions.db_port}"
+            })
+
+    # 4. 添加负载均衡
+    if decisions.availability > 99.5:
+        blueprint.services.insert(0, {
+            "name": "ALB",
+            "type": "Application Load Balancer",
+            "multi_az": True
+        })
+        blueprint.connections.insert(0, {
+            "from": "Internet",
+            "to": "ALB",
+            "label": "HTTP/HTTPS"
+        })
+
+    # 5. 构建网络配置
+    blueprint.network_config = {
+        "vpc": {
+            "cidr": "10.0.0.0/16",
+            "multi_az": decisions.availability > 99.5,
+            "subnets": generate_subnets(decisions)
+        }
+    }
+
+    return blueprint
+```
+
+**架构蓝图应包含的关键要素:**
+- ✅ 所有确定的 AWS 服务
+- ✅ 服务间的数据流和依赖关系
+- ✅ Multi-AZ 配置(若适用)
+- ✅ 网络配置(VPC、子网、路由)
+- ✅ 安全组和网络 ACL 规则(概览)
+- ✅ 备份和灾备配置(概览)
+
+#### 6.4.3 MCP Server 响应处理
+
+**预期返回结果:**
+```json
+{
+  "status": "success",
+  "diagram_file": "/tmp/aws_architecture_diagram.png",
+  "diagram_format": "PNG",
+  "services_detected": [
+    "Application Load Balancer",
+    "EC2 Auto Scaling Group",
+    "RDS for MySQL",
+    "S3 Bucket"
+  ],
+  "connections_detected": [
+    {"from": "ALB", "to": "EC2", "type": "forward"},
+    {"from": "EC2", "to": "RDS", "type": "query"}
+  ]
+}
+```
+
+**错误处理:**
+- 若 MCP Server 不可用: 回退到文字描述架构,在 Design Writer 阶段补充
+- 若生成失败: 记录日志,继续流程,但在 Design Reviewer 阶段标注"架构图缺失"
+
+#### 6.4.4 架构图与文档的集成
+
+**在 Design Writer 阶段:**
+1. 在"总体架构概述"章节插入架构图(PNG/SVG)
+2. 添加架构图的文字描述
+3. 标注关键组件和数据流
+
+**示例插入:**
+```markdown
+## 3. 总体架构概述
+
+### 3.1 架构风格
+Web 三层架构 (Multi-AZ 部署)
+
+### 3.2 核心组件概览
+...
+
+### 3.3 架构图
+![AWS Architecture Diagram](./diagrams/architecture.png)
+
+### 3.4 架构图文字描述
+...
+```
+
+#### 6.4.5 Design Reviewer 阶段的架构图检查
+
+**新增检查项:**
+- [ ] 架构图是否存在?
+- [ ] 架构图中的服务是否与设计文档一致?
+- [ ] 架构图是否体现了 Multi-AZ/Multi-Region 部署?
+- [ ] 架构图中的连接是否准确?
+- [ ] 关键组件(备份、灾备、监控)是否在架构图中标注?
+
+**检查失败处理:**
+- 若架构图与文档不一致: 标注为 Critical Issue,要求修正
+- 若架构图缺失关键组件: 标注为 Warning,建议补充
+
 ---
 
 ## 七、推荐 Prompt 模板
@@ -1583,18 +2050,36 @@ def architecture_decisioning(requirements):
 ## 九、后续扩展方向
 
 ### 9.1 与其他 Skill 的集成
-- **架构图生成 Skill**: 基于文字描述自动生成 Draw.io / Lucidchart 架构图
+- **架构图生成 Skill**(已实现):
+  - ✅ 通过 awslabs-aws-diagram-mcp-server 自动生成架构图
+  - ✅ 支持用户上传的架构图识别和验证
+  - ✅ 自动生成架构图的文字描述
 - **IaC 代码生成 Skill**: 将设计说明书转为 Terraform / CloudFormation 代码
 - **成本计算 Skill**: 基于服务选型自动调用 AWS Pricing API 生成详细成本报告
 
-### 9.2 知识库增强
+### 9.2 架构图生成能力
+**已实现:**
+- ✅ 用户提供架构图时的检测和识别(Vision/OCR)
+- ✅ 架构蓝图自动构建(基于架构决策)
+- ✅ MCP Server 集成(awslabs-aws-diagram-mcp-server)
+- ✅ 架构图一致性验证
+- ✅ 文字描述自动生成
+
+**未来增强:**
+- 🔄 支持多个架构模式的专用绘制优化
+- 🔄 实时架构图修改和验证
+- 🔄 架构图版本管理(历史对比)
+- 🔄 支持导出为 Draw.io/Lucidchart 格式
+
+### 9.3 知识库增强
 - 集成 AWS Well-Architected Framework Lens 库
 - 集成行业 Compliance 要求库(金融、医疗、政务)
 - 集成 AWS 服务配额(Service Quotas)检查
 
-### 9.3 交互式优化
+### 9.4 交互式优化
 - 支持多轮对话,逐步细化设计
 - 支持"设计对比"功能(方案 A vs 方案 B)
+- 支持架构图的交互式编辑和验证
 
 ---
 
@@ -1673,10 +2158,49 @@ def architecture_decisioning(requirements):
 
 ---
 
-**文档版本:** v1.2
-**最后更新:** 2026-01-06
+**文档版本:** v1.4
+**最后更新:** 2026-01-07
 
 ## 版本历史
+
+### v1.4 (2026-01-07)
+⭐⭐ **重大更新: 架构图自动生成能力**
+
+**新增功能:**
+- ✅ 整体流程升级为 5-Step Pipeline,新增架构图生成步骤
+- ✅ 用户架构图检测与识别能力(Vision/OCR)
+- ✅ 架构蓝图自动构建(基于架构决策)
+- ✅ MCP Server 集成: awslabs-aws-diagram-mcp-server
+- ✅ 架构图与需求的一致性检查
+- ✅ 架构图文字描述自动生成
+- ✅ 两种处理路径:
+  - Case 1: 用户提供架构图 → 识别验证 → 文字描述
+  - Case 2: 用户无架构图 → 蓝图构建 → MCP 生成 → 文字描述
+
+**新增实现文件:**
+- `scripts/diagram_generator.py`: 架构图生成核心模块
+  - DiagramGenerator: 主生成器
+  - BlueprintBuilder: 蓝图构建器
+  - DiagramValidator: 一致性验证器
+  - DiagramDescriptionGenerator: 文字描述生成器
+- `scripts/mcp_diagram_client.py`: MCP Server 集成模块
+  - MCPDiagramClient: MCP 客户端
+  - DiagramGenerationOrchestrator: 编排器
+  - 完整的蓝图验证和请求处理
+
+**新增设计文档:**
+- 第 2-A 节: Architecture Diagram Generation 详细设计
+- 第 6.4 节: 架构图生成执行要点
+  - MCP Server 集成工作流
+  - 架构蓝图构建规则
+  - MCP 响应处理
+  - Design Reviewer 阶段的架构图检查
+
+**关键改进:**
+- 视觉化架构表示: 所有设计都包含生成的或用户提供的架构图
+- 自动一致性检查: 架构图与文档的内容验证
+- 降级方案: MCP Server 不可用时的文本描述备选
+- 完整的检查流程: 从架构图检测到文档集成的全链路
 
 ### v1.3 (2026-01-06)
 ⭐⭐ **重大更新: 大数据与 AI/ML 架构设计能力**
