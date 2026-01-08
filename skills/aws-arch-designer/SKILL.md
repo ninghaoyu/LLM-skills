@@ -9,8 +9,9 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 
 ## 核心能力
 
-- **材料解析**: 处理会议记录、需求列表、代码片段等零散材料
-- **智能追问**: 自动识别缺失信息并主动追问
+- **多模态材料解析**: 直接处理 Word、Excel、PDF、Markdown、图片等任意格式材料
+- **批量上传支持**: 支持用户将材料集中在一个目录，批量扫描上传
+- **智能追问**: 自动识别缺失信息并主动追问（P0 关键信息）
 - **架构决策**: 基于 AWS Well-Architected Framework 进行服务选型
 - **多场景支持**: Web 应用、AI/ML、大数据、SaaS、混合云
 - **标准化输出**: 生成完整的架构设计说明书
@@ -19,38 +20,44 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 
 此 Skill 遵循严格的 **5 步流程**，**不可跳过或合并**：
 
-### 步骤 0: 案例学习文件识别（可选但推荐）
+### 步骤 0: 案例学习文件识别与分析（可选但推荐）
 
-**功能**: 自动识别和参考案例学习文件
+**功能**: 自动识别和分析案例学习文件（多模态直接处理）
 
 **何时触发**:
-- 用户提供包含"案例"、"case study"、"项目背景"、"痛点"、"解决方案"等关键词的文档
+- 用户上传包含"案例"、"case study"、"项目背景"、"痛点"、"解决方案"等关键词的文档
+- 无需脚本检测，LLM 直接理解
 
-**执行任务**:
+**支持的案例文件格式**（任意格式）:
+- 📄 Word (docx)、PDF
+- 🖼️ 包含架构图的图片（PNG/JPG）
+- 📊 Excel（包含项目数据、成本预算表）
+- 📝 Markdown 或纯文本
 
-1. **自动检测案例文件**:
-   使用 `scripts/case_study_analyzer.py` 中的 `CaseStudyDetector`
+**执行任务（LLM 多模态直接处理）:**
+
+1. **自动检测案例文件**（无需脚本）:
+   LLM 理解文件内容，识别是否为案例学习文件
    - 文件名模式识别（case study、案例、迁移方案等）
-   - 内容关键词识别（20+ 中英文关键词）
+   - 内容关键词识别（背景、痛点、解决方案、收益等）
    - 自动判定文件是否为案例学习文件
 
-2. **结构化信息提取**:
-   从案例文件中提取：
+2. **结构化信息提取**（多模态理解）:
+   从任意格式的案例文件中提取：
    - **项目背景**: 行业、公司规模、现状基础设施
    - **痛点分析**: 问题描述、影响、严重程度
    - **AWS 解决方案**: 服务组合、架构模式、配置
    - **关键指标**: 可用性、性能、流量、数据量
    - **预期收益**: 成本节省、性能提升、业务影响
    - **经验教训**: 关键经验和最佳实践
-   - **架构图**: 自动检测（Markdown 和 HTML 格式）
+   - **架构图**: 理解文件中的架构图（PDF 中的图片、独立图片文件等）
 
-3. **与新项目进行相关性匹配**:
-   使用 `CaseStudyMatcher` 计算相关性分数（0-100）
+3. **与新项目进行相关性匹配**（LLM 理解能力）:
+   计算相关性分数（0-100）：
    - 行业相似性 (30 分)
    - 公司规模相似性 (20 分)
    - 痛点相似性 (30 分)
    - 功能需求相似性 (20 分)
-   - 架构模式一致性 (bonus 10 分)
 
    相关性等级：
    - **High (≥70)**: 强烈推荐参考，可直接采用案例的架构模式
@@ -70,13 +77,18 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
   "case_study_metadata": {
     "title": "项目标题",
     "industry": "行业",
-    "company_scale": "公司规模"
+    "company_scale": "公司规模",
+    "source_file": "电商平台迁移案例.pdf"
   },
   "pain_points": [...],
   "aws_solution": {...},
   "key_metrics": {...},
   "expected_benefits": {...},
   "lessons_learned": [...],
+  "architecture_diagram": {
+    "detected": true,
+    "description": "架构图描述..."
+  },
   "match_with_new_project": {
     "relevance_score": 85,
     "relevance_level": "high",
@@ -87,59 +99,104 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 ```
 
 **关键原则**:
+- ✅ 多模态直接理解，无需脚本
+- ✅ 支持任意格式文件（Word/PDF/图片/Excel）
 - ✅ 相似案例可加速架构决策
 - ✅ 从案例中提取验证过的最佳实践
 - ✅ 吸取案例的经验教训规避风险
-- ✅ 基于案例的成本数据进行预算规划
 - ❌ 不要盲目复制，需要考虑新项目的特殊约束
 
 ---
 
-### 步骤 1: Material Parser (材料解析)
+### 步骤 1: Material Parser (多模态材料解析)
 
-**目标**: 从零散材料中提取结构化需求信息，检测是否为案例学习文件
+**目标**: 通过多模态模型从用户提交的任意格式材料中提取结构化需求信息
 
-**输入材料可能是**:
+**支持的输入材料格式（无需预处理脚本，LLM 直接处理）:**
+
+**文本类**:
 - 会议记录（散乱的讨论要点）
-- 简单需求列表（箭头式要点）
-- 代码片段（现有系统实现参考）
-- Word/Excel 文档
-- 混合形式的文本
-- **案例学习文件**（包含背景、痛点、方案、架构图、收益）
-- **架构图**（用户上传的 PNG/PDF/JPEG）
+- 需求列表（箭头式要点、编号列表）
+- 代码片段（推断技术栈）
+- Markdown 和纯文本
 
-**执行任务**:
+**文档类**:
+- Word (docx): 提取文本、表格、嵌入的图片和架构图
+- Excel (xlsx): 提取数据、图表、注释（如资源清单、成本预算）
+- PDF: 提取文本和图片（包括架构图）
 
-1. **提取 5 大关键要素**:
-   - 功能需求：系统需要实现的业务功能
-   - 非功能需求：可用性、性能、延迟、扩展性、RTO/RPO
-   - 合规性要求：等保、GDPR、数据本地化等
-   - 预算限制：月度/年度预算上限
-   - 预估流量：DAU、QPS、数据量、峰值倍数
+**图片类**:
+- PNG、JPEG、JPG、GIF、WebP、SVG、BMP
+- 架构图、流程图、截图等
 
-2. **检测案例学习文件**:
-   使用 `scripts/case_study_analyzer.py` 中的 `CaseStudyDetector`
-   - 如果检测到案例文件，触发步骤 0 的案例分析流程
-   - 提取案例中的关键信息用于参考和决策
+**混合形式**:
+- 用户可在一个目录中放置多个不同格式的文件
+- Skill 支持批量扫描上传（用户一次上传整个目录或多个文件）
 
-3. **识别项目类型**:
-   使用 `scripts/material_parser.py` 中的 `identify_project_type()` 函数
+**批量上传目录结构示例**:
+```
+/项目名称/
+├── 需求说明.md                 # Markdown
+├── 会议记录.txt               # 纯文本
+├── 业务需求.docx              # Word 文档
+├── 现有资源表.xlsx             # Excel 表格
+├── 架构参考图.png              # 架构图（可选）
+├── 案例_电商平台迁移.pdf       # 案例学习文件（可选）
+└── 其他材料/
+    ├── 流程图.jpg
+    ├── 数据模型.pdf
+    └── ...
+```
+
+**执行任务（LLM 多模态直接处理，无需脚本）:**
+
+1. **扫描和理解所有文件**:
+   - 📄 **Word**: 提取文本、表格、嵌入图片
+   - 📊 **Excel**: 提取数据、图表、注释
+   - 📕 **PDF**: 提取文本和图片（包括架构图）
+   - 🖼️ **图片**: 理解架构图、流程图、截图
+   - 📝 **文本**: 理解会议记录、需求说明
+
+2. **自动检测案例学习文件**（无需脚本）:
+   LLM 识别文件内容中的关键词，如果检测到：
+   - 案例、case study、项目背景、现状痛点、AWS 解决方案、预期收益
+   - 自动触发步骤 0 的案例分析流程
+
+3. **提取 5 大关键要素**（多模态直接理解）:
+   - **功能需求**: 从文本、图表、代码中提取业务功能
+   - **非功能需求**: 从需求和注释中识别可用性、性能、延迟、扩展性、RTO/RPO
+   - **合规性要求**: 从文档中识别等保、GDPR、数据本地化等
+   - **预算限制**: 从 Excel 或说明中提取预算数据
+   - **预估流量**: 从数据表和需求中推断 DAU、QPS、数据量、峰值倍数
+
+4. **识别项目类型**（无需脚本函数）:
+   LLM 理解全部内容后自动分类：
    - AI/ML 项目：GenAI、RAG、Agentic
    - 大数据项目：批处理、实时流、数据湖
    - 传统应用：Web、SaaS、混合云
 
-4. **标注缺失信息**:
-   识别 P0 关键信息（RTO/RPO、可用性、流量、区域）
+5. **理解用户提供的架构图**（多模态能力）:
+   如果用户上传了架构图（PNG/JPG/PDF 中的图片）：
+   - 识别 AWS 服务图标和组件
+   - 理解数据流和连接关系
+   - 提取关键配置（Multi-AZ、扩展策略等）
+   - 验证架构与文字需求的匹配度
 
-5. **生成追问列表**:
-   使用 `scripts/material_parser.py` 中的 `generate_clarification_questions()` 函数
+6. **标注缺失信息**（无需脚本）:
+   LLM 自动识别 P0 关键信息的缺失：
+   - RTO/RPO、可用性要求、预估流量、AWS 区域
+
+7. **生成追问列表**（无需脚本）:
+   LLM 基于缺失的 P0 信息生成追问：
    - 提供选项或参考值（如: "RTO < 4h, RPO < 1h"）
    - 一次最多 3-5 个问题
    - 使用易于理解的语言
 
-6. **输出结构化 JSON**:
+8. **输出结构化 JSON**:
    ```json
    {
+     "input_files": ["需求说明.md", "会议记录.txt", "业务需求.docx", "现有资源表.xlsx", "架构参考图.png"],
+     "project_type": "Web-Application",
      "business_goals": [...],
      "functional_requirements": [...],
      "non_functional_requirements": {...},
@@ -147,16 +204,27 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
      "constraints": {...},
      "assumptions": [...],
      "open_questions": [...],
-     "generated_questions_for_user": [...]
+     "generated_questions_for_user": [...],
+     "detected_architecture_diagram": {
+       "exists": true,
+       "source_file": "架构参考图.png",
+       "description": "用户提供的架构图显示了 Web 三层架构..."
+     },
+     "detected_case_study": {
+       "exists": false,
+       "message": "未检测到案例学习文件"
+     }
    }
    ```
 
 **关键原则**:
-- ❌ 不要"脑补"未明确的强约束
-- ✅ 优先提取明确信息，不确定的标注为"待确认"
-- ✅ 对于代码片段，推断技术栈但不假设架构模式
-- ✅ 对于会议记录，区分"已决策"和"待讨论"
-- ✅ 生成的追问问题必须具体、可操作
+- ✅ **多模态优先**: 直接使用 LLM 的多模态能力处理所有格式（无需脚本）
+- ✅ **批量处理**: 支持用户一次上传多个文件或整个目录
+- ✅ **无脚本依赖**: 不需要 `material_parser.py`、`case_study_analyzer.py` 等预处理脚本
+- ✅ **自动检测**: 自动识别案例文件、架构图等特殊内容
+- ✅ **优先提取**: 优先提取明确信息，不确定的标注为"待确认"
+- ❌ **不脑补**: 不要"脑补"未明确的强约束
+- ❌ **不假设**: 对于不确定信息应主动追问或标注假设
 
 **如果有追问问题**: 向用户展示问题并等待回答，然后合并回答到结构化数据中。
 
@@ -783,3 +851,143 @@ else:
    - 用户提供的图 → 验证和标注
    - 自动生成的图 → MCP Server 集成
    - 降级方案 → 纯文本描述
+
+---
+
+## 脚本优化指南 - 多模态处理改进
+
+### 核心优化原则
+
+**原始设计的问题**:
+- `material_parser.py`: 试图通过脚本处理文本和结构化提取 ❌
+- `case_study_analyzer.py`: 试图通过正则和规则进行案例检测 ❌
+- 这些脚本在多模态 LLM 时代**完全冗余**
+
+**新方向**:
+✅ **相信 LLM 的多模态能力直接处理所有格式** - Word、PDF、图片、Excel、文本
+✅ **让 LLM 直接理解内容** - 无需预处理脚本
+✅ **支持批量上传** - 用户在一个目录中放置所有材料，一次上传多个文件
+
+### 脚本清理清单
+
+#### ❌ 应删除的脚本（完全冗余）
+
+1. **`scripts/material_parser.py`** - 完全不需要
+   - **原因**: LLM 可以直接处理和理解任何格式的输入材料
+   - **原函数用途**:
+     - `parse_material()` → LLM 直接理解（无需脚本）
+     - `identify_project_type()` → LLM 直接推断（无需脚本）
+     - `generate_clarification_questions()` → LLM 直接生成（无需脚本）
+   - **删除方法**: 直接删除整个文件
+
+2. **`scripts/case_study_analyzer.py`** - 完全不需要
+   - **原因**: LLM 多模态能力可直接理解案例文件内容
+   - **原函数用途**:
+     - `CaseStudyDetector.detect()` → LLM 直接识别（通过内容理解）
+     - `CaseStudyExtractor` 各函数 → LLM 直接提取（无需 NLP 规则）
+     - `CaseStudyMatcher.calculate_relevance()` → LLM 直接评估（无需评分算法）
+   - **删除方法**: 直接删除整个文件
+
+#### ✅ 可保留的脚本（需要改造）
+
+1. **`scripts/diagram_generator.py`** - 保留但改造
+   - **改造目标**: 不做架构图检测和验证，只支持 LLM 调用 MCP
+   - **改造内容**:
+     - 删除 `DiagramGenerator.detect_user_diagram()` - LLM 直接理解
+     - 删除 `DiagramValidator` 类 - LLM 直接验证
+     - 保留 `BlueprintBuilder` - 帮助构建结构化的架构蓝图
+     - 保留与 MCP 的接口调用部分
+
+2. **`scripts/mcp_diagram_client.py`** - 保留
+   - **目的**: 与 `awslabs-aws-diagram-mcp-server` 通信
+   - **保留原因**: 必须的 MCP 集成
+   - **改造内容**:
+     - 简化 API（移除内部检测逻辑）
+     - 直接响应 LLM 的 MCP 调用请求
+     - 返回生成的架构图结果
+
+### 新架构流程
+
+```
+用户上传材料（任意格式、批量）
+    ↓
+LLM 多模态直接理解（无脚本）
+    ├─ 理解所有格式（Word/PDF/图片/Excel/文本）
+    ├─ 自动检测案例文件
+    ├─ 提取 5 大关键要素
+    ├─ 理解用户提供的架构图
+    └─ 生成追问问题
+    ↓
+[如果缺少架构图]
+    LLM 调用 MCP: awslabs-aws-diagram-mcp-server
+    (diagram_generator.py 和 mcp_diagram_client.py 配合)
+    ↓
+生成完整的架构设计说明书
+```
+
+### 实施步骤
+
+#### 第 1 步: 删除完全冗余的脚本
+```bash
+rm -f scripts/material_parser.py
+rm -f scripts/case_study_analyzer.py
+```
+
+#### 第 2 步: 改造 diagram_generator.py
+删除以下类和方法：
+- `DiagramGenerator.detect_user_diagram()`
+- `DiagramValidator` 整个类
+- 所有与内部检测相关的代码
+
+保留：
+- `BlueprintBuilder` - LLM 调用来构建蓝图
+- `DiagramDescriptionGenerator` - 生成文字描述
+
+#### 第 3 步: 简化 mcp_diagram_client.py
+- 移除内部验证逻辑
+- 简化为直接调用 MCP 的瘦客户端
+- 返回原始 MCP 结果
+
+#### 第 4 步: 更新 SKILL.md 和 DEEPV.md
+- ✅ 已完成（本次修改）
+- 强调多模态处理
+- 移除对脚本的引用
+
+### 最终项目结构
+
+```
+skills/aws-arch-designer/
+├── SKILL.md                    # 修改完成 ✅
+├── DEEPV.md                    # 修改完成 ✅
+├── README.md
+├── SKILL_TEST_CASES.md
+├── assets/
+│   └── design_doc_template.md
+├── references/
+│   ├── architecture_patterns.md
+│   └── waf_checklist.md
+└── scripts/
+    ├── diagram_generator.py      # 保留（改造）
+    └── mcp_diagram_client.py      # 保留（保持不变或简化）
+
+    ❌ 已删除:
+    - material_parser.py
+    - case_study_analyzer.py
+```
+
+### 关键改动总结
+
+| 方面 | 原设计 | 新设计 |
+|-----|--------|--------|
+| **材料处理** | 脚本 → 正则匹配 | **LLM 多模态** → 直接理解 |
+| **案例检测** | 脚本 → 关键词匹配 | **LLM** → 内容理解 |
+| **上传方式** | 单文件处理 | **批量上传** → 支持目录和多个文件 |
+| **架构图理解** | 脚本 vision API | **LLM 直接** → 多模态能力 |
+| **代码行数** | ~2000 行脚本 | **~0 行脚本**（全部 LLM）+ 小型 MCP 客户端 |
+
+### 使用建议
+
+1. **先更新文档** ✅ (已完成 SKILL.md 和 DEEPV.md)
+2. **立即删除**: `material_parser.py` 和 `case_study_analyzer.py`
+3. **渐进改造**: 逐步简化 `diagram_generator.py` 和 `mcp_diagram_client.py`
+4. **测试验证**: 确保 LLM 能直接处理各种材料格式
