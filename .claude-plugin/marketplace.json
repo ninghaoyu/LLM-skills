@@ -1,0 +1,315 @@
+{
+  "version": "1.0.0",
+  "skills": [
+    {
+      "id": "aws-arch-designer",
+      "name": "AWS 架构设计说明书生成器",
+      "description": "将零散的客户材料（会议记录、需求列表、代码片段等）转化为结构化、符合 AWS Best Practice 的《架构设计说明书》。支持 Web 应用、AI/ML（GenAI、RAG、Agentic）、大数据（批处理、实时流、数据湖）等多种架构类型。",
+      "version": "1.0.0",
+      "author": "ninghaoyu",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/ninghaoyu/LLM-skills.git",
+        "directory": "skills/aws-arch-designer"
+      },
+      "capabilities": [
+        {
+          "name": "多模态材料解析",
+          "description": "直接处理 Word、Excel、PDF、Markdown、图片等任意格式材料"
+        },
+        {
+          "name": "批量上传支持",
+          "description": "支持用户将材料集中在一个目录，批量扫描上传"
+        },
+        {
+          "name": "智能追问",
+          "description": "自动识别缺失信息并主动追问（RTO/RPO、峰值流量、合规要求等）"
+        },
+        {
+          "name": "架构决策",
+          "description": "基于 AWS Well-Architected Framework 进行服务选型和决策"
+        },
+        {
+          "name": "多场景支持",
+          "description": "Web 应用、AI/ML、大数据、SaaS、混合云等多种架构类型"
+        },
+        {
+          "name": "标准化输出",
+          "description": "生成完整的 11 章节架构设计说明书"
+        },
+        {
+          "name": "架构图生成",
+          "description": "自动生成 AWS 架构图（基于用户提供或自动识别）"
+        },
+        {
+          "name": "案例学习分析",
+          "description": "识别和分析案例学习文件，支持与新项目的相关性匹配"
+        }
+      ],
+      "useCases": [
+        "客户提供零散需求材料需要整理和结构化",
+        "需要进行 AWS 架构设计和规划",
+        "需要生成标准化的架构设计文档",
+        "需要基于 AWS Well-Architected Framework 进行架构评估",
+        "AI/ML 项目的架构设计（GenAI、RAG、Agentic 系统）",
+        "大数据平台架构设计（批处理、实时流、数据湖）",
+        "SaaS 多租户应用设计",
+        "混合云和专线架构设计"
+      ],
+      "requiredCapabilities": [
+        "multimodal_processing",
+        "file_upload",
+        "text_generation",
+        "json_handling"
+      ],
+      "keywords": [
+        "AWS",
+        "架构设计",
+        "云计算",
+        "AI/ML",
+        "大数据",
+        "多模态",
+        "文档生成",
+        "架构图",
+        "Well-Architected",
+        "系统设计"
+      ],
+      "documentation": {
+        "mainFile": "SKILL.md",
+        "requirementsFile": "DEEPV.md",
+        "referenceFiles": [
+          "references/architecture_patterns.md",
+          "references/waf_checklist.md"
+        ],
+        "assets": [
+          "assets/design_doc_template.md"
+        ]
+      },
+      "inputFormats": [
+        "text/plain",
+        "text/markdown",
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/svg+xml",
+        "image/bmp"
+      ],
+      "outputFormats": [
+        "text/markdown",
+        "application/json"
+      ],
+      "workflowSteps": [
+        {
+          "step": 0,
+          "name": "案例学习文件识别与分析（可选）",
+          "description": "自动识别和分析案例学习文件，支持与新项目的相关性匹配",
+          "optional": true,
+          "triggers": [
+            "用户上传包含案例关键词的文件"
+          ]
+        },
+        {
+          "step": 1,
+          "name": "多模态材料解析与主动追问",
+          "description": "从零散材料中提取 5 大关键要素，识别项目类型，生成追问列表",
+          "optional": false,
+          "inputs": [
+            "会议记录",
+            "需求列表",
+            "代码片段",
+            "Word/PDF/Excel 文件",
+            "架构图"
+          ],
+          "outputs": [
+            "结构化需求数据",
+            "项目类型识别",
+            "追问列表"
+          ]
+        },
+        {
+          "step": 2,
+          "name": "架构图生成与验证",
+          "description": "检测用户提供的架构图或自动生成，进行一致性验证",
+          "optional": false,
+          "inputs": [
+            "用户提供的架构图或自动生成的蓝图"
+          ],
+          "outputs": [
+            "架构图文件",
+            "架构图描述",
+            "一致性检查结果"
+          ]
+        },
+        {
+          "step": 3,
+          "name": "架构决策与 WAF 评估",
+          "description": "选择架构模式，进行服务选型决策，执行 WAF 六大支柱检查",
+          "optional": false,
+          "inputs": [
+            "结构化需求数据",
+            "项目类型"
+          ],
+          "outputs": [
+            "架构决策",
+            "服务选型",
+            "WAF 评估结果",
+            "设计蓝图"
+          ]
+        },
+        {
+          "step": 4,
+          "name": "架构设计说明书生成",
+          "description": "按固定 11 章节模板生成完整的架构设计说明书",
+          "optional": false,
+          "inputs": [
+            "架构决策结果",
+            "WAF 评估",
+            "架构图"
+          ],
+          "outputs": [
+            "完整的架构设计说明书（Markdown）"
+          ]
+        },
+        {
+          "step": 5,
+          "name": "设计评审与优化建议",
+          "description": "进行最终的设计评审和优化建议",
+          "optional": false,
+          "inputs": [
+            "完整的架构设计说明书"
+          ],
+          "outputs": [
+            "问题清单",
+            "修订建议",
+            "最终版本"
+          ]
+        }
+      ],
+      "supportedArchitecturePatterns": [
+        "Web 三层架构",
+        "Serverless API",
+        "SaaS 多租户",
+        "混合云 / 专线",
+        "批量数据处理平台",
+        "实时数据处理平台",
+        "数据湖架构",
+        "大数据计算集群",
+        "GenAI 应用架构",
+        "RAG 架构",
+        "AI Agentic 系统",
+        "ML 训练与推理平台",
+        "多模态 AI 架构"
+      ],
+      "supportedAWSServices": {
+        "compute": [
+          "EC2",
+          "Lambda",
+          "ECS",
+          "EKS",
+          "Fargate"
+        ],
+        "database": [
+          "RDS",
+          "Aurora",
+          "DynamoDB",
+          "ElastiCache",
+          "Redshift"
+        ],
+        "storage": [
+          "S3",
+          "EBS",
+          "EFS"
+        ],
+        "network": [
+          "VPC",
+          "ALB",
+          "NLB",
+          "CloudFront",
+          "Route 53"
+        ],
+        "ai_ml": [
+          "Amazon Bedrock",
+          "SageMaker",
+          "Amazon Rekognition",
+          "Amazon Textract"
+        ],
+        "bigdata": [
+          "Athena",
+          "Glue",
+          "EMR",
+          "Kinesis",
+          "Lake Formation"
+        ]
+      },
+      "supportedRegions": [
+        "AWS Global",
+        "AWS China"
+      ],
+      "integrations": [
+        {
+          "name": "AWS Diagram MCP Server",
+          "description": "用于自动生成 AWS 架构图",
+          "optional": false
+        }
+      ],
+      "relatedSkills": [],
+      "installation": {
+        "method": "git",
+        "source": "https://github.com/ninghaoyu/LLM-skills.git",
+        "directory": "skills/aws-arch-designer",
+        "instructions": [
+          "1. 克隆仓库: git clone https://github.com/ninghaoyu/LLM-skills.git",
+          "2. 进入 Skill 目录: cd skills/aws-arch-designer",
+          "3. 阅读 SKILL.md 了解使用方法",
+          "4. 按照 SKILL.md 中的工作流程使用该 Skill"
+        ]
+      },
+      "systemRequirements": {
+        "minTokens": 8000,
+        "recommendedTokens": 32000,
+        "supportedModels": [
+          "claude-3-5-sonnet",
+          "claude-3-opus",
+          "claude-3-sonnet"
+        ]
+      },
+      "performance": {
+        "averageExecutionTime": "10-15 minutes",
+        "concurrency": "sequential",
+        "notes": "完整的架构设计说明书生成通常需要 10-15 分钟，取决于材料复杂度和提问回合数"
+      },
+      "changelog": {
+        "1.0.0": {
+          "date": "2026-01-08",
+          "changes": [
+            "完整重构：迁移到 LLM 原生多模态处理",
+            "删除所有脚本依赖（3200+ 行代码删除）",
+            "支持任意文件格式（Word、Excel、PDF、图片）",
+            "支持批量上传和混合格式",
+            "完全由 LLM 驱动，零维护成本",
+            "新增架构图生成和验证能力",
+            "新增案例学习文件分析和相关性匹配",
+            "扩展支持 13 种架构模式",
+            "支持 AWS 全球和中国区域"
+          ]
+        }
+      },
+      "tags": [
+        "aws",
+        "architecture",
+        "design",
+        "ai-ml",
+        "bigdata",
+        "cloud",
+        "infrastructure",
+        "multimodal",
+        "document-generation"
+      ]
+    }
+  ]
+}
