@@ -1,0 +1,22 @@
+{
+  "name": "llm-skills",
+  "owner": {
+    "name": "ninghaoyu",
+    "email": "ninghaoyu@example.com"
+  },
+  "metadata": {
+    "description": "LLM skills for AWS architecture design and document processing",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "aws-arch-designer",
+      "description": "AWS 架构设计说明书生成器。将零散的客户材料（会议记录、需求列表、代码片段等）转化为结构化、符合 AWS Best Practice 的《架构设计说明书》。支持 Web 应用、AI/ML、大数据等多种架构类型。",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/aws-arch-designer"
+      ]
+    }
+  ]
+}
