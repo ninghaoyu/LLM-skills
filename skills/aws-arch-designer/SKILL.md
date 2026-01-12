@@ -14,7 +14,24 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 - **智能追问**: 自动识别缺失信息并主动追问（P0 关键信息）
 - **架构决策**: 基于 AWS Well-Architected Framework 进行服务选型
 - **多场景支持**: Web 应用、AI/ML、大数据、SaaS、混合云
+- **多模板支持**: 根据项目类型自动选择对应的专用模板
 - **标准化输出**: 生成完整的架构设计说明书
+
+### 多模板支持说明
+
+Skill 现已支持**针对不同项目类型的专用设计模板**：
+
+| 项目类型 | 使用模板 | 特殊设计 | 章节数 |
+|---------|---------|---------|--------|
+| **AI/ML-Agentic** | `design_doc_template_ai_agentic.md` | 🎯 Agent 编排、LLM 部署、Tool Chain、负责任 AI、幻觉检测 | **14** |
+| **其他所有类型** | `design_doc_template.md` | 标准 AWS Well-Architected 设计 | **11** |
+
+**关键特性**:
+- ✨ **AI Agentic 专用模板**: 融合 AWS Agentic AI 实践要求的 6 大核心能力（推理、工具链、互操作性、安全、负责任 AI、计算）
+- ✨ **智能选择**: 步骤 1 自动识别项目类型后，步骤 4 自动选择对应模板
+- ✨ **完全符合需求**: AI Agentic 模板涵盖 Agent 编排、Token 成本控制、幻觉防护、人类在循环等关键要素
+- ✨ **验证清单差异化**: 不同模板有不同的验证要求，确保文档质量
+- ✨ **向后兼容**: 已有的通用模板保持不变，作为其他项目类型的默认选择
 
 ## 工作流程
 
@@ -590,22 +607,89 @@ else:
 
 ### 步骤 4: Design Writer (文档生成)
 
-**目标**: 按固定模板生成架构设计说明书并输出为 Markdown 文件
+**目标**: 按项目类型对应的模板生成架构设计说明书并输出为 Markdown 文件
 
-**前置条件**: 步骤 3 已完成，所有服务选型和 WAF 评估已完成
+**前置条件**: 步骤 3 已完成，所有服务选型和 WAF 评估已完成，项目类型已确认
 
 **CRITICAL - 必须执行**:
-- ✅ 使用 `templates/design_doc_template.md` 作为基础模板
+- ✅ 根据项目类型选择对应的模板
 - ✅ 填充所有占位符（`{PLACEHOLDER_NAME}`）
 - ✅ **生成完整的 Markdown 文件**（不仅仅是文本响应）
 - ✅ 文件命名规则: `{PROJECT_NAME}_架构设计说明书_v1.0.md`
 - ✅ 将文件保存到项目目录或返回给用户下载
 
+#### 4.0 模板选择（CRITICAL）
+
+根据步骤 1 识别的项目类型，选择对应的标准化模板：
+
+**项目类型与模板映射**:
+
+```python
+PROJECT_TYPE_TO_TEMPLATE = {
+    # AI/ML 项目
+    "AI/ML-Agentic": "templates/design_doc_template_ai_agentic.md",
+    "AI/ML-RAG": "templates/design_doc_template.md",           # 通用模板
+    "AI/ML-GenAI": "templates/design_doc_template.md",         # 通用模板
+
+    # 大数据项目
+    "BigData-Batch": "templates/design_doc_template.md",       # 通用模板
+    "BigData-Streaming": "templates/design_doc_template.md",   # 通用模板
+    "BigData-DataLake": "templates/design_doc_template.md",    # 通用模板
+
+    # 迁移项目
+    "Migration-CloudMigration": "templates/design_doc_template.md",  # 通用模板
+    "Migration-Hybrid": "templates/design_doc_template.md",          # 通用模板
+
+    # 传统应用
+    "Web-Application": "templates/design_doc_template.md",     # 通用模板
+    "SaaS-MultiTenant": "templates/design_doc_template.md",    # 通用模板
+}
+
+# 决策逻辑
+selected_template = PROJECT_TYPE_TO_TEMPLATE.get(
+    project_type,
+    "templates/design_doc_template.md"  # 默认通用模板
+)
+```
+
+**模板说明**:
+
+| 项目类型 | 模板文件 | 特殊章节 | 适用场景 |
+|---------|---------|---------|---------|
+| **AI/ML-Agentic** | `design_doc_template_ai_agentic.md` | Agent 编排、工具链、负责任 AI、幻觉检测 | Bedrock Agents、LangGraph、Agent 框架 |
+| **其他所有类型** | `design_doc_template.md` | 标准 11 章 | Web、RAG、GenAI、大数据、迁移等 |
+
+**模板特色对比**:
+
+**AI Agentic 专用模板** (`design_doc_template_ai_agentic.md`):
+- ✨ 14 个章节（比通用模板多 3 个）
+- ✨ 专门的 "推理与 LLM 部署设计" 章节 (第 5 章)
+- ✨ 专门的 "Agent 编排与工具设计" 章节 (第 6 章)
+- ✨ 专门的 "状态管理与记忆设计" 章节 (第 7 章)
+- ✨ 专门的 "向量存储与知识库设计" 章节 (第 8 章)
+- ✨ 融合 Agentic AI 实践要求 (推理、工具链、互操作性、安全、负责任 AI、计算)
+- ✨ 关键指标: Agent 成功率、推理延迟、Token 使用率、幻觉发生率、人工审核占比
+- ✨ Agentic AI 能力评估矩阵 (附录 A)
+- ✨ 实施路线图 (附录 B)
+- ✨ 详细的风险管理（Prompt 注入、幻觉、工具失败）
+
+**通用模板** (`design_doc_template.md`):
+- 标准 11 个章节
+- 适用于大多数项目类型
+- 包含标准的 AWS Well-Architected 检查
+
+**CRITICAL - 不要混用模板**:
+- ❌ 不要在 AI Agentic 项目中使用通用模板
+- ❌ 不要在其他项目中使用 AI Agentic 专用模板
+- ✅ 根据项目类型严格选择对应模板
+
 **执行任务**:
 
 #### 4.1 模板映射
 
-基于步骤 1、2、3 的输出结果，填充以下占位符：
+根据选定的模板（步骤 4.0），填充对应的占位符。
+
+**通用模板** (`design_doc_template.md`) 占位符：
 
 | 占位符 | 数据源 | 填充内容 |
 |-------|--------|---------|
@@ -662,6 +746,25 @@ else:
 | `{OPEN_QUESTIONS}` | 步骤 1 | 待客户确认的问题 |
 | `{SERVICE_LIST}` | 步骤 3 | 完整的 AWS 服务清单和配置参数 |
 
+**AI Agentic 专用模板** (`design_doc_template_ai_agentic.md`) 关键占位符：
+
+| 占位符类别 | 关键占位符示例 | 数据源 |
+|----------|--------------|--------|
+| **基础信息** | `{PROJECT_NAME}`, `{DATE}`, `{BUSINESS_GOALS}` | 步骤 1 |
+| **Agentic 原则** | `{AGENTIC_REASONING_PRINCIPLE}`, `{AGENTIC_TOOLING_PRINCIPLE}`, `{AGENTIC_RESPONSIBLE_AI_PRINCIPLE}`, `{AGENTIC_SECURITY_PRINCIPLE}` | 步骤 3 AI 特有评估 |
+| **LLM 选择** | `{LLM_MODEL_CHOICE}`, `{LLM_CHOICE_WHY}`, `{LLM_DEPLOYMENT_CHOICE}` | 步骤 3 AI 决策 |
+| **Agent 编排** | `{AGENT_ORCHESTRATOR_CHOICE}`, `{ACTION_GROUPS_DESIGN}`, `{TOOL_INTEGRATION_PROTOCOL}` | 步骤 3 Agent 设计 |
+| **状态管理** | `{STATE_STORAGE_CHOICE}`, `{SESSION_LIFECYCLE_MANAGEMENT}` | 步骤 3 决策 |
+| **安全性** | `{BEDROCK_GUARDRAILS_DESIGN}`, `{PROMPT_INJECTION_PROTECTION}`, `{DATA_PRIVACY_STRATEGY}` | 步骤 3 安全评估 |
+| **成本优化** | `{TOKEN_COST_CONTROL_STRATEGY}`, `{MONTHLY_LLM_COST}`, `{COST_OPTIMIZATION}` | 步骤 3 成本评估 |
+| **幻觉防护** | `{HALLUCINATION_DETECTION}`, `{FACT_CHECKING}`, `{HUMAN_IN_LOOP}` | 步骤 3 负责任 AI |
+| **监控告警** | `{MONITORING_ALERTING}`, Agent 成功率、推理延迟、Token 使用率 | 步骤 3 运维设计 |
+
+**关键差异**:
+- ✨ **AI Agentic 模板** 有 10+ 个 Agent 和 LLM 特定的占位符
+- ✨ **AI Agentic 模板** 强调 Token 成本、幻觉检测、负责任 AI、人类在循环
+- 📊 **两个模板** 共享基础占位符（项目名称、背景、WAF 原则等）
+
 #### 4.2 章节要求（严格按顺序，不可合并或跳过）
 
 每个章节必须包含：
@@ -670,7 +773,7 @@ else:
 - **权衡说明（Trade-off）** - 这个方案的优势和劣势
 - **基于假设的内容标注** - 若信息不足，明确标注 `【假设】` 或 `【待确认】`
 
-**11 个章节清单**:
+**通用模板（11 个章节）**:
 1. ✅ 设计背景与目标
 2. ✅ 架构设计原则
 3. ✅ 总体架构概述
@@ -682,6 +785,22 @@ else:
 9. ✅ 运维与监控设计
 10. ✅ 成本与扩展性分析
 11. ✅ 风险、假设与待确认事项
+
+**AI Agentic 专用模板（14 个章节）**:
+1. ✅ 设计背景与目标
+2. ✅ **AI Agentic 架构设计原则**（比通用模板多 Agentic 特有原则）
+3. ✅ **总体架构概述**（加强 Agent、LLM、工具角色说明）
+4. ✅ 网络架构设计
+5. ✅ **推理与 LLM 部署设计**（新增，替代通用模板的计算层设计）
+6. ✅ **Agent 编排与工具设计**（新增，核心 Agentic 功能）
+7. ✅ **状态管理与记忆设计**（新增）
+8. ✅ **向量存储与知识库设计**（新增，若使用 RAG）
+9. ✅ 计算层设计（Agent 运行环境）
+10. ✅ **安全与负责任 AI 设计**（扩展，新增 Guardrails、幻觉检测、HITL）
+11. ✅ 高可用与灾备设计
+12. ✅ **运维、监控与可观测性设计**（强化 Agent 特定指标）
+13. ✅ **成本与性能优化**（强化 Token 成本、推理延迟）
+14. ✅ 风险、假设与待确认事项
 
 #### 4.3 文风和格式要求
 
@@ -738,9 +857,10 @@ else:
 {PROJECT_NAME}_架构设计说明书_v1.0.md
 
 示例:
-- 电商平台_架构设计说明书_v1.0.md
-- 企业知识库_架构设计说明书_v1.0.md
-- AI聊天机器人_架构设计说明书_v1.0.md
+- 电商平台迁移_架构设计说明书_v1.0.md      # 迁移项目
+- 企业知识库_RAG_架构设计说明书_v1.0.md    # RAG 项目
+- AI客服代理_Agentic_架构设计说明书_v1.0.md  # AI Agentic 项目（注意 Agentic 标记）
+- 实时数据分析_架构设计说明书_v1.0.md      # 大数据项目
 ```
 
 **输出方式**:
@@ -749,6 +869,8 @@ else:
 3. 或将完整的 Markdown 内容返回给用户，用户可复制保存
 
 **验证清单**:
+
+**通用模板项目** (Web、RAG、GenAI、大数据、迁移等):
 - [ ] 所有 11 个章节都已包含
 - [ ] 所有占位符都已填充，没有 `{PLACEHOLDER}` 残留
 - [ ] 每个技术选择都有 Why 和 Trade-off
@@ -756,16 +878,103 @@ else:
 - [ ] 格式符合 Markdown 规范
 - [ ] 文件名符合规则
 - [ ] 中文语言使用正确
+- [ ] 使用的是 `templates/design_doc_template.md`
+
+**AI Agentic 专用项目**:
+- [ ] 所有 14 个章节都已包含（比通用模板多 3 章）
+- [ ] **第 2 章：AI Agentic 架构设计原则** 完整
+- [ ] **第 5 章：推理与 LLM 部署设计** 包括 Token 成本控制
+- [ ] **第 6 章：Agent 编排与工具设计** 包括 Action Groups 和 MCP 集成
+- [ ] **第 7 章：状态管理与记忆设计** 完整
+- [ ] **第 8 章：向量存储与知识库** 完整（如适用）
+- [ ] **第 10 章：安全与负责任 AI** 包括 Guardrails、幻觉检测、人类在循环
+- [ ] **第 12 章：运维监控** 包括 Agent 特定指标（成功率、推理延迟、Token 使用率）
+- [ ] **第 13 章：成本优化** 包括 Token 成本分析
+- [ ] **附录 A：Agentic AI 能力评估矩阵** 完整
+- [ ] **附录 B：项目实施路线图** 包括 4 个阶段
+- [ ] 所有占位符都已填充，没有 `{PLACEHOLDER}` 残留
+- [ ] 每个技术选择都有 Why 和 Trade-off
+- [ ] 格式符合 Markdown 规范
+- [ ] 文件名包含 `Agentic` 标记（可选但推荐）
+- [ ] 中文语言使用正确
+- [ ] 使用的是 `templates/design_doc_template_ai_agentic.md`
 
 **输出**:
 - 🎯 **必须输出完整的 Markdown 文件**
 - 文件名: `{PROJECT_NAME}_架构设计说明书_v1.0.md`
-- 格式: 严格按照 `templates/design_doc_template.md` 模板
-- 内容: 填充所有占位符，11 个章节完整
+- 格式: 严格按照选定的模板
+- 内容: 填充所有占位符，所有章节完整
 
 #### 4.6 Design Writer Prompt 模板
 
-当执行步骤 4 时，使用以下 Prompt 指导 LLM 生成文档：
+当执行步骤 4 时，根据项目类型使用对应的 Prompt：
+
+**AI Agentic 项目 Prompt**:
+
+```markdown
+你是一名资深 AWS 解决方案架构师，需要基于已完成的架构决策，
+生成标准化的《AWS AI Agentic 架构设计说明书》。
+
+【输入数据】
+- 步骤 1 提取的需求数据（项目背景、业务目标、AI 功能需求、流量估算等）
+- 步骤 2 生成或识别的架构图
+- 步骤 3 完成的架构决策和 WAF 评估结果（包括 Agentic AI 特定检查）
+
+【执行任务】
+
+1. **选择模板**
+   使用 `templates/design_doc_template_ai_agentic.md` 作为专用模板
+
+2. **填充 Agentic 特定占位符**
+   按优先级填充：
+   - **推理与 LLM**: LLM 模型选择、Token 成本控制、部署方案
+   - **Agent 编排**: Agent Orchestrator、Action Groups、工具集成、MCP
+   - **状态管理**: 会话存储、多 Agent 协调
+   - **安全性**: Bedrock Guardrails、Prompt 注入防护、幻觉检测、人类在循环
+   - **监控**: Agent 成功率、推理延迟、Token 使用率、幻觉发生率
+
+3. **生成完整的 Markdown 文档**
+   - 严格按照 14 个章节顺序（比通用模板多 3 章）
+   - 第 5-8 章是 Agentic AI 核心设计章节
+   - 第 10、12、13 章强化 Agentic AI 安全、运维、成本
+   - 每个章节包含 Why、Trade-off、假设标注
+   - 使用清晰的 Markdown 格式（##、###、```、表格、列表）
+
+4. **关键要求**
+   - Token 成本控制策略必须明确
+   - Agent 工具集成方案必须包括错误处理
+   - 幻觉检测和人类在循环必须说明
+   - 能力评估矩阵（附录 A）必须完整
+   - 实施路线图（附录 B）必须包括 4 个阶段
+
+5. **输出文件**
+   文件名: {PROJECT_NAME}_Agentic_架构设计说明书_v1.0.md
+   示例: AI客服代理_Agentic_架构设计说明书_v1.0.md
+
+6. **验证清单**
+   - [ ] 所有 14 个章节完整
+   - [ ] 没有 {PLACEHOLDER} 残留
+   - [ ] 每个决策都有 Why 和 Trade-off
+   - [ ] Token 成本分析清晰
+   - [ ] Agent 工具集成方案完整
+   - [ ] 幻觉检测和 HITL 方案明确
+   - [ ] Agentic 能力评估矩阵完整
+   - [ ] Markdown 格式正确
+
+【关键原则】
+- ✅ 遵循 AI Agentic 专用模板结构
+- ✅ 强化 LLM 成本控制和性能优化
+- ✅ 详细说明 Agent 编排和工具集成
+- ✅ 重点关注负责任 AI 和幻觉防护
+- ✅ 输出实际的 Markdown 文件
+- ✅ 技术说明书风格
+- ❌ 不要使用通用模板
+- ❌ 不要跳过 Agent/LLM 相关章节
+- ❌ 不要忽略 Token 成本控制
+- ❌ 不要跳过幻觉检测和 HITL
+```
+
+**其他项目类型 Prompt** (Web、RAG、GenAI、大数据、迁移等):
 
 ```markdown
 你是一名资深 AWS 解决方案架构师，需要基于已完成的架构决策，
@@ -778,7 +987,7 @@ else:
 
 【执行任务】
 
-1. **使用模板**
+1. **使用通用模板**
    打开 `templates/design_doc_template.md` 作为基础模板
 
 2. **填充占位符**
@@ -793,7 +1002,7 @@ else:
 
 4. **输出文件**
    文件名: {PROJECT_NAME}_架构设计说明书_v1.0.md
-   示例: 电商平台_架构设计说明书_v1.0.md
+   示例: 电商平台迁移_架构设计说明书_v1.0.md
 
 5. **验证清单**
    - [ ] 所有 11 个章节完整
@@ -804,7 +1013,7 @@ else:
    - [ ] 文件名符合规则
 
 【关键原则】
-- ✅ 遵循模板结构，不要改变章节顺序或合并
+- ✅ 遵循通用模板结构，不要改变章节顺序或合并
 - ✅ 填充所有占位符，确保完整性
 - ✅ 输出实际的 Markdown 文件，不仅仅是文本响应
 - ✅ 技术说明书风格，避免营销语言
