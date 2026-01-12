@@ -590,46 +590,229 @@ else:
 
 ### 步骤 4: Design Writer (文档生成)
 
-**目标**: 按固定模板生成架构设计说明书
+**目标**: 按固定模板生成架构设计说明书并输出为 Markdown 文件
 
 **前置条件**: 步骤 3 已完成，所有服务选型和 WAF 评估已完成
 
+**CRITICAL - 必须执行**:
+- ✅ 使用 `templates/design_doc_template.md` 作为基础模板
+- ✅ 填充所有占位符（`{PLACEHOLDER_NAME}`）
+- ✅ **生成完整的 Markdown 文件**（不仅仅是文本响应）
+- ✅ 文件命名规则: `{PROJECT_NAME}_架构设计说明书_v1.0.md`
+- ✅ 将文件保存到项目目录或返回给用户下载
+
 **执行任务**:
 
-使用 `templates/design_doc_template.md` 作为基础模板。
+#### 4.1 模板映射
 
-**章节要求（严格按顺序，不可合并或跳过）**:
+基于步骤 1、2、3 的输出结果，填充以下占位符：
 
-1. 设计背景与目标
-2. 架构设计原则
-3. 总体架构概述
-4. 网络架构设计
-5. 计算层设计
-6. 存储与数据库设计
-7. 安全与权限设计
-8. 高可用与灾备设计
-9. 运维与监控设计
-10. 成本与扩展性分析
-11. 风险、假设与待确认事项
+| 占位符 | 数据源 | 填充内容 |
+|-------|--------|---------|
+| `{PROJECT_NAME}` | 步骤 1 | 项目名称 |
+| `{DATE}` | 系统 | 当前日期 |
+| `{PROJECT_BACKGROUND}` | 步骤 1 | 项目背景和业务需求 |
+| `{BUSINESS_GOALS}` | 步骤 1 | 业务目标列表 |
+| `{SUCCESS_CRITERIA}` | 步骤 1 | 成功标准和关键指标 |
+| `{OPERATIONAL_EXCELLENCE_PRINCIPLE}` | 步骤 3 WAF | 卓越运营设计说明 |
+| `{SECURITY_PRINCIPLE}` | 步骤 3 WAF | 安全性设计说明 |
+| `{RELIABILITY_PRINCIPLE}` | 步骤 3 WAF | 可靠性设计说明 |
+| `{PERFORMANCE_PRINCIPLE}` | 步骤 3 WAF | 性能效率设计说明 |
+| `{COST_PRINCIPLE}` | 步骤 3 WAF | 成本优化设计说明 |
+| `{SUSTAINABILITY_PRINCIPLE}` | 步骤 3 WAF | 可持续性设计说明 |
+| `{PROJECT_SPECIFIC_PRINCIPLES}` | 步骤 1 | 项目特定的设计原则 |
+| `{ARCHITECTURE_STYLE}` | 步骤 3 | 选择的架构模式（如 Web 三层架构、RAG 架构） |
+| `{CORE_COMPONENTS}` | 步骤 3 | 核心 AWS 服务及其作用 |
+| `{ARCHITECTURE_DIAGRAM_DESCRIPTION}` | 步骤 2 | 架构图的文字描述 |
+| `{VPC_DESIGN}` | 步骤 3 | VPC 设计和配置 |
+| `{SUBNET_PLANNING}` | 步骤 3 | 子网规划（公有、私有、数据库层） |
+| `{ROUTING_AND_GATEWAYS}` | 步骤 3 | 路由表和网关配置 |
+| `{HYBRID_CLOUD_CONNECTION}` | 步骤 1 | 混合云连接方案（若适用） |
+| `{COMPUTE_SERVICE_CHOICE}` | 步骤 3 | 选择的计算服务及原因 |
+| `{COMPUTE_WHY}` | 步骤 3 | 计算服务选择理由 |
+| `{COMPUTE_PROS}` | 步骤 3 | 选择方案的优势 |
+| `{COMPUTE_CONS}` | 步骤 3 | 选择方案的劣势 |
+| `{COMPUTE_ALTERNATIVES}` | 步骤 3 | 替代方案及升级路径 |
+| `{SCALING_STRATEGY}` | 步骤 3 | Auto Scaling、负载均衡等扩展策略 |
+| `{CONTAINER_FUNCTION_DESIGN}` | 步骤 3 | 容器或函数设计（若适用） |
+| `{DATABASE_CHOICE}` | 步骤 3 | 选择的数据库服务 |
+| `{DATABASE_WHY}` | 步骤 3 | 数据库选择理由 |
+| `{DATABASE_PROS}` | 步骤 3 | 数据库方案的优势 |
+| `{DATABASE_CONS}` | 步骤 3 | 数据库方案的劣势 |
+| `{DATABASE_ALTERNATIVES}` | 步骤 3 | 替代数据库方案 |
+| `{S3_DESIGN}` | 步骤 3 | S3 配置、分区策略、生命周期 |
+| `{BACKUP_STRATEGY}` | 步骤 3 | 备份策略和恢复流程 |
+| `{IAM_DESIGN}` | 步骤 3 | IAM 角色和权限策略 |
+| `{NETWORK_SECURITY}` | 步骤 3 | Security Group、NACL、WAF 配置 |
+| `{ENCRYPTION_IN_TRANSIT}` | 步骤 3 | TLS、VPN 等传输加密配置 |
+| `{ENCRYPTION_AT_REST}` | 步骤 3 | KMS、服务端加密等静态加密配置 |
+| `{COMPLIANCE}` | 步骤 1 | 合规性要求（等保、GDPR 等）及实现方案 |
+| `{MULTI_AZ_DEPLOYMENT}` | 步骤 3 | Multi-AZ 部署说明 |
+| `{RTO}` | 步骤 1 | 恢复时间目标 |
+| `{RPO}` | 步骤 1 | 恢复点目标 |
+| `{DISASTER_RECOVERY}` | 步骤 3 | 灾备方案（备份、故障转移、跨 Region） |
+| `{LOG_AGGREGATION}` | 步骤 3 | CloudWatch Logs 和日志保留策略 |
+| `{MONITORING_ALERTING}` | 步骤 3 | CloudWatch Alarms、SNS 通知配置 |
+| `{AUTOMATION}` | 步骤 3 | Systems Manager、EventBridge、Lambda 自动化 |
+| `{COST_ESTIMATION}` | 步骤 3 | 成本估算表（月度/年度预估） |
+| `{SCALABILITY_ANALYSIS}` | 步骤 3 | 扩展性分析和成长规划 |
+| `{COST_OPTIMIZATION}` | 步骤 3 | RI、Savings Plans、Spot、Auto Scaling 优化 |
+| `{TECHNICAL_RISKS}` | 步骤 1 + 步骤 3 | 技术风险和缓解策略 |
+| `{ASSUMPTIONS}` | 步骤 1 | 基于假设的内容清单 |
+| `{OPEN_QUESTIONS}` | 步骤 1 | 待客户确认的问题 |
+| `{SERVICE_LIST}` | 步骤 3 | 完整的 AWS 服务清单和配置参数 |
 
-**每一章节必须包含**:
-- 设计选择的具体内容
-- 选择理由（Why）
-- 权衡说明（Trade-off）
-- 若信息不足，基于步骤 1 中的假设并**明确标注**
+#### 4.2 章节要求（严格按顺序，不可合并或跳过）
 
-**文风要求**:
+每个章节必须包含：
+- **设计选择的具体内容** - 清晰说明选了什么服务和配置
+- **选择理由（Why）** - 为什么选择这个方案而不是其他
+- **权衡说明（Trade-off）** - 这个方案的优势和劣势
+- **基于假设的内容标注** - 若信息不足，明确标注 `【假设】` 或 `【待确认】`
+
+**11 个章节清单**:
+1. ✅ 设计背景与目标
+2. ✅ 架构设计原则
+3. ✅ 总体架构概述
+4. ✅ 网络架构设计
+5. ✅ 计算层设计
+6. ✅ 存储与数据库设计
+7. ✅ 安全与权限设计
+8. ✅ 高可用与灾备设计
+9. ✅ 运维与监控设计
+10. ✅ 成本与扩展性分析
+11. ✅ 风险、假设与待确认事项
+
+#### 4.3 文风和格式要求
+
+**文风**:
 - 技术说明书风格，避免营销语言
 - 适合直接交付客户或进入方案评审
-- 使用 Markdown 格式
-- 语言：中文
+- 客观中立，不做过度承诺
 
-**禁止事项**:
-- ❌ 引入步骤 1 中未出现的强约束
-- ❌ 使用 AWS China 不可用的服务（若 region = China）
-- ❌ 过度设计（无需求不上 EKS / Multi-Region）
+**格式**:
+- 使用 Markdown 语法
+- 章节编号清晰（## 表示一级章节，### 表示二级章节）
+- 代码块使用 ```json、```yaml 标注
+- 表格使用 Markdown 表格格式
+- 列表使用 - 或数字编号
 
-**输出**: 完整的 Markdown 文档，章节编号清晰（使用 ##、###）
+**示例章节格式**:
+```markdown
+## 5. 计算层设计
+
+### 5.1 计算服务选择
+
+选择 **Amazon EC2 Auto Scaling Group** 作为计算层。
+
+**选择理由 (Why)**:
+- 现有应用基于 Spring Boot，迁移成本最低
+- 需要完整的操作系统控制，定制化部署
+- 团队已有 EC2 运维经验
+
+**权衡 (Trade-off)**:
+- ✅ 优势:
+  - 灵活性高，支持任意定制
+  - 成本相对较低（与容器化相比）
+  - Auto Scaling 支持自动扩展
+- ❌ 劣势:
+  - 需要维护操作系统和补丁
+  - 对比 Lambda，冷启动更慢
+- 💡 替代方案:
+  - ECS Fargate: 若想减少 OS 管理工作，可考虑容器化
+  - Lambda: 若应用改造为无状态微服务
+```
+
+#### 4.4 禁止事项
+
+- ❌ 不要引入步骤 1 中未出现的强约束
+- ❌ 不要使用 AWS China 不可用的服务（若 region = China）
+- ❌ 不要过度设计（无需求不上 EKS / Multi-Region）
+- ❌ **不要仅输出文本响应，必须生成实际的 Markdown 文件**
+- ❌ 不要偏离模板结构，改变章节顺序或合并章节
+
+#### 4.5 生成和输出文件
+
+**文件命名规则**:
+```
+{PROJECT_NAME}_架构设计说明书_v1.0.md
+
+示例:
+- 电商平台_架构设计说明书_v1.0.md
+- 企业知识库_架构设计说明书_v1.0.md
+- AI聊天机器人_架构设计说明书_v1.0.md
+```
+
+**输出方式**:
+1. 生成完整的 Markdown 文件内容
+2. 保存为文件（若有文件系统访问权限）
+3. 或将完整的 Markdown 内容返回给用户，用户可复制保存
+
+**验证清单**:
+- [ ] 所有 11 个章节都已包含
+- [ ] 所有占位符都已填充，没有 `{PLACEHOLDER}` 残留
+- [ ] 每个技术选择都有 Why 和 Trade-off
+- [ ] 假设和待确认事项都已明确标注
+- [ ] 格式符合 Markdown 规范
+- [ ] 文件名符合规则
+- [ ] 中文语言使用正确
+
+**输出**:
+- 🎯 **必须输出完整的 Markdown 文件**
+- 文件名: `{PROJECT_NAME}_架构设计说明书_v1.0.md`
+- 格式: 严格按照 `templates/design_doc_template.md` 模板
+- 内容: 填充所有占位符，11 个章节完整
+
+#### 4.6 Design Writer Prompt 模板
+
+当执行步骤 4 时，使用以下 Prompt 指导 LLM 生成文档：
+
+```markdown
+你是一名资深 AWS 解决方案架构师，需要基于已完成的架构决策，
+生成标准化的《AWS 架构设计说明书》。
+
+【输入数据】
+- 步骤 1 提取的需求数据（项目背景、业务目标、非功能需求、流量估算、约束条件等）
+- 步骤 2 生成或识别的架构图
+- 步骤 3 完成的架构决策和 WAF 评估结果
+
+【执行任务】
+
+1. **使用模板**
+   打开 `templates/design_doc_template.md` 作为基础模板
+
+2. **填充占位符**
+   根据输入数据填充所有 {PLACEHOLDER} 占位符
+   - 必须逐一填充，不留空白
+   - 使用数据驱动的内容，不使用虚拟或假设的数据
+
+3. **生成完整的 Markdown 文档**
+   - 严格按照 11 个章节顺序
+   - 每个章节包含 Why、Trade-off、假设标注
+   - 使用清晰的 Markdown 格式（##、###、```、表格、列表）
+
+4. **输出文件**
+   文件名: {PROJECT_NAME}_架构设计说明书_v1.0.md
+   示例: 电商平台_架构设计说明书_v1.0.md
+
+5. **验证清单**
+   - [ ] 所有 11 个章节完整
+   - [ ] 没有 {PLACEHOLDER} 残留
+   - [ ] 每个决策都有 Why 和 Trade-off
+   - [ ] 假设明确标注【假设】
+   - [ ] Markdown 格式正确
+   - [ ] 文件名符合规则
+
+【关键原则】
+- ✅ 遵循模板结构，不要改变章节顺序或合并
+- ✅ 填充所有占位符，确保完整性
+- ✅ 输出实际的 Markdown 文件，不仅仅是文本响应
+- ✅ 技术说明书风格，避免营销语言
+- ✅ 每个技术选择都要有明确的理由
+- ❌ 不要跳过任何章节
+- ❌ 不要引入未在步骤 1 中出现的需求
+- ❌ 不要改变模板的基本结构
+```
 
 ---
 
