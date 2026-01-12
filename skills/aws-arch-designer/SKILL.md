@@ -18,7 +18,7 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 
 ## 工作流程
 
-此 Skill 遵循严格的 **5 步流程**，**不可跳过或合并**：
+此 Skill 遵循严格的 **6 步流程**，**不可跳过或合并**：
 
 ### 步骤 0: 案例学习文件识别与分析（可选但推荐）
 
@@ -230,58 +230,106 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
 
 ---
 
-### 步骤 2: Architecture Diagram Generation (架构图生成与验证)
+### 步骤 2: Architecture Diagram Generation (架构图处理与验证)
 
-**目标**: 获取或生成架构图，并验证其与需求的匹配度
+**目标**: 正确处理架构图，绝不自作主张重新设计架构
 
 **前置条件**: 步骤 1 已完成，所有 P0 信息已确认
 
-**处理两种情况**:
+**关键原则 - 必须严格遵守**:
+- 🚫 **如果用户提供了架构图，绝对不要自行设计架构和生成架构图**
+- ✅ 只能理解、验证和描述用户提供的架构图
+- ✅ 只有在用户明确未提供架构图时，才能调用 MCP Server 生成新的架构图
+- ✅ 基于用户的架构图进行架构设计和决策
+
+**判断逻辑**（必须严格按以下顺序执行）:
+
+```
+检查用户是否提供了架构图
+    ↓
+Yes（用户提供了架构图）
+    ↓
+【情况 1】
+┌─────────────────────────────────────────────────────────┐
+│ ✅ DO: 理解、验证、描述用户的架构图                        │
+│ ❌ DO NOT: 设计新的架构，生成替代的架构图                  │
+│ ❌ DO NOT: 质疑用户的架构设计，除非有明确的技术错误        │
+└─────────────────────────────────────────────────────────┘
+    ↓
+No（用户未提供架构图）
+    ↓
+【情况 2】
+┌─────────────────────────────────────────────────────────┐
+│ ✅ DO: 基于需求进行架构设计，调用 MCP Server 生成架构图    │
+│ ✅ DO: 进行 WAF 和最佳实践评估                             │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
 
 #### 情况 1: 用户提供了架构图（PNG/PDF/JPEG）
 
 **执行任务**:
 
-1. **检测和识别架构图**:
-   使用 `scripts/diagram_generator.py` 中的 `DiagramGenerator.detect_user_diagram()`
-   - 识别图片中的 AWS 服务图标
-   - 提取架构图中的数据流和连接关系
-   - 识别关键配置（Multi-AZ、Auto Scaling 等）
+1. **识别架构图**:
+   LLM 直接理解用户上传的架构图
+   - 识别图片中的 AWS 服务图标和组件
+   - 理解数据流和服务间的连接关系
+   - 识别关键配置（Multi-AZ、扩展策略等）
 
 2. **生成架构图文字描述**:
-   使用 `DiagramDescriptionGenerator.generate_from_blueprint()`
-   - 生成 Markdown 格式的架构描述
+   LLM 基于用户的架构图生成 Markdown 描述
+   - 清晰描述架构中的每个组件
+   - 说明服务间的连接和数据流
+   - 注释关键的配置和决策点
    - 用于后续的 Design Writer 阶段
 
 3. **验证架构图与需求的匹配度**:
-   使用 `DiagramValidator` 进行一致性检查：
-   - ✅ **服务完整性检查**: 架构图中的服务是否包含所有关键服务
-   - ✅ **Multi-AZ 部署检查**: 生产环境是否明确 Multi-AZ 配置
-   - ✅ **连接关系检查**: 服务间连接是否有效和正确
-   - ✅ **配置一致性检查**: 关键参数是否与需求匹配
+   进行一致性检查（**仅限验证，不做修改或建议替换**）：
+   - ✅ **服务覆盖检查**: 架构中是否包含了满足功能需求的服务？
+   - ✅ **非功能需求检查**: 架构是否满足可用性、性能、扩展性需求？
+   - ✅ **连接有效性检查**: 服务间的连接是否合理？
+   - ⚠️ **告警而非阻断**: 如果发现潜在问题，仅以**建议**的形式反馈，不强制修改
 
 4. **输出**:
 ```json
 {
   "diagram_source": "user_provided",
+  "diagram_file": "user_architecture.png",
   "detected_services": ["ALB", "EC2", "RDS", "S3"],
   "diagram_text_description": "架构图文字描述...",
   "consistency_check": {
-    "service_completeness": "✅ Pass",
-    "multi_az_deployment": "✅ Pass",
+    "service_coverage": "✅ Pass",
+    "nfr_satisfaction": "✅ Pass",
     "connection_validity": "✅ Pass",
-    "issues": []
+    "warnings": [],
+    "improvement_suggestions": []  // 可选改进建议，非强制
   }
 }
 ```
+
+**严格禁止**:
+- ❌ 不要说"我会为你设计一个更好的架构"
+- ❌ 不要生成替代的架构图
+- ❌ 不要修改用户的架构设计
+- ❌ 不要批评用户的架构选择（除非有明确的技术错误）
+- ❌ 不要自作主张调用 MCP Server 生成新的架构图
+- ❌ 不要忽视用户的架构而强行进行 WAF 重新评估和重新设计
+
+**应该说的话**:
+- ✅ "您的架构图显示了一个 Web 三层架构..."
+- ✅ "基于您提供的架构，这些服务组合可以满足..."
+- ✅ "您的架构设计考虑了 Multi-AZ 部署，这很好"
+- ✅ "一个可选的改进是...（如果用户感兴趣）"
+
+---
 
 #### 情况 2: 用户未提供架构图
 
 **执行任务**:
 
 1. **构建架构蓝图**:
-   使用 `scripts/diagram_generator.py` 中的 `BlueprintBuilder`
-   基于步骤 1 的结构化需求构建蓝图，包括：
+   LLM 基于步骤 1 的结构化需求和步骤 3 的架构决策，构建架构蓝图
    - 计算层服务（EC2、Lambda、Fargate 等）
    - 数据库服务（RDS、DynamoDB、Aurora 等）
    - 缓存服务（ElastiCache 等）
@@ -290,19 +338,24 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
    - 服务间连接关系
 
 2. **调用 MCP Server 生成架构图**:
-   使用 `scripts/mcp_diagram_client.py` 中的 `MCPDiagramClient`
-   - 连接到 `awslabs-aws-diagram-mcp-server`
+   使用 `scripts/mcp_diagram_client.py` 与 `awslabs-aws-diagram-mcp-server` 通信
    - 传入架构蓝图
    - 返回 PNG/SVG 格式的架构图
 
 3. **生成架构图文字描述**:
-   与情况 1 相同
+   LLM 基于自动生成的架构图生成 Markdown 描述
+   - 清晰描述架构中的每个组件
+   - 说明服务间的连接和数据流
+   - 注释关键的配置和决策点
 
 4. **进行一致性验证**:
-   与情况 1 相同的 4 项检查
+   验证生成的架构是否满足之前的 WAF 评估结果
+   - 检查所有关键服务是否包含
+   - 检查 Multi-AZ 部署是否正确配置
+   - 检查连接关系是否合理
 
 5. **降级方案**:
-   如果 MCP Server 不可用，使用纯文本描述架构而不生成图片
+   如果 MCP Server 不可用，使用纯文本描述架构而不强制生成图片
 
 **输出**:
 ```json
@@ -313,23 +366,35 @@ description: AWS 架构设计说明书生成器。将零散的客户材料（会
   "services": [...],
   "connections": [...],
   "diagram_text_description": "架构图文字描述...",
-  "consistency_check": {...}
+  "consistency_check": {
+    "waf_alignment": "✅ Pass",
+    "service_completeness": "✅ Pass",
+    "connection_validity": "✅ Pass",
+    "issues": []
+  }
 }
 ```
 
-**关键原则**:
-- ✅ 所有设计最终都应有对应的架构图表示
+---
+
+**关键原则 - 必须遵守**:
+- ✅ 用户提供架构图 → 尊重、验证、描述
+- ✅ 用户未提供架构图 → 进行架构设计、生成架构图
 - ✅ 架构图和设计文档必须保持一致
-- ✅ 检查清单必须全部通过
-- ❌ 如果一致性检查失败，返回步骤 1 重新分析需求
+- ❌ 绝对不要自作主张地替换用户的架构图
+- ❌ 绝对不要在用户已提供架构图的情况下自行重新设计
 
 ---
 
-### 步骤 4: Architecture Decisioning (架构决策)
+### 步骤 3: Architecture Decisioning (架构决策)
 
-**目标**: 基于结构化需求进行服务选型和 WAF 评估
+**目标**: 基于结构化需求和用户提供的架构图（或自行设计的架构），进行服务选型和 WAF 评估
 
-**前置条件**: 步骤 1 已完成，且所有 P0 问题已得到回答，架构图已处理
+**前置条件**: 步骤 1 已完成，且所有 P0 问题已得到回答，步骤 2 已处理架构图
+
+**重要说明**:
+- 如果用户提供了架构图 → 基于用户的架构图进行决策和 WAF 评估
+- 如果用户未提供架构图 → 基于需求自行设计架构并进行评估
 
 **执行任务**:
 
@@ -527,7 +592,7 @@ else:
 
 **目标**: 按固定模板生成架构设计说明书
 
-**前置条件**: 步骤 2 已完成，架构图已获取或生成，所有服务选型和 WAF 评估已完成
+**前置条件**: 步骤 3 已完成，所有服务选型和 WAF 评估已完成
 
 **执行任务**:
 
@@ -572,7 +637,7 @@ else:
 
 **目标**: 检查架构设计的完整性和正确性
 
-**前置条件**: 步骤 3 已完成，设计文档已生成
+**前置条件**: 步骤 4 已完成，设计文档已生成
 
 **执行任务**:
 
@@ -642,11 +707,22 @@ else:
   "generated_questions_for_user": [
     "请问对系统的 RTO 和 RPO 有明确要求吗？例如: RTO < 4h, RPO < 1h",
     "高峰期的 QPS 大约是多少？例如: 500 QPS"
-  ]
+  ],
+  "user_provided_diagram": false
 }
 ```
 
-**步骤 2 输出**:
+**步骤 2 输出**（架构图处理）:
+```json
+{
+  "diagram_source": "auto_generated",
+  "diagram_file": "/tmp/architecture.png",
+  "detected_services": ["ALB", "EC2", "RDS", "S3"],
+  "diagram_text_description": "基于需求生成的 Web 三层架构图..."
+}
+```
+
+**步骤 3 输出**（架构决策）:
 ```json
 {
   "architecture_pattern": "Web 三层架构",
@@ -666,6 +742,55 @@ else:
 ```
 
 **最终输出**: 完整的架构设计说明书（11 个章节）
+
+---
+
+### 示例 1b: 用户提供了架构图的电商平台迁移
+
+**用户输入**:
+```
+需求：电商平台云迁移
+附件：我已经设计了一个架构，请基于我的架构进行评估和文档化
+[用户上传了 architecture.png]
+```
+
+**步骤 1 输出**: （与示例 1 相同）
+
+**步骤 2 输出**（架构图处理）:
+```json
+{
+  "diagram_source": "user_provided",
+  "diagram_file": "architecture.png",
+  "detected_services": ["ALB", "EC2", "RDS", "ElastiCache", "S3"],
+  "diagram_text_description": "用户提供的架构图展示了一个 Web 三层架构...",
+  "consistency_check": {
+    "service_coverage": "✅ Pass - 所有关键服务都已包含",
+    "nfr_satisfaction": "✅ Pass - 支持 99.9% 可用性",
+    "connection_validity": "✅ Pass",
+    "warnings": [],
+    "improvement_suggestions": [
+      "可选：考虑添加 CloudFront CDN 加速静态资源"
+    ]
+  }
+}
+```
+
+**步骤 3 输出**（基于用户架构的决策）:
+```json
+{
+  "architecture_pattern": "Web 三层架构（基于用户提供）",
+  "selected_services": {
+    "compute": "EC2 Auto Scaling Group",
+    "load_balancer": "Application Load Balancer",
+    "database": "RDS for MySQL Multi-AZ",
+    "cache": "ElastiCache Redis",
+    "storage": "S3"
+  },
+  "decision_basis": "基于用户提供的架构图进行决策和 WAF 评估"
+}
+```
+
+**最终输出**: 基于用户架构的完整设计说明书
 
 ---
 
@@ -696,11 +821,22 @@ else:
   "generated_questions_for_user": [
     "对响应延迟有要求吗？例如: <2秒",
     "每月的 AI 成本预算是多少？"
-  ]
+  ],
+  "user_provided_diagram": false
 }
 ```
 
-**步骤 2 输出**:
+**步骤 2 输出**（架构图生成）:
+```json
+{
+  "diagram_source": "auto_generated",
+  "diagram_file": "/tmp/rag_architecture.png",
+  "services": ["Bedrock KB", "OpenSearch Serverless", "Lambda", "S3"],
+  "diagram_text_description": "自动生成的 RAG 架构图..."
+}
+```
+
+**步骤 3 输出**（架构决策）:
 ```json
 {
   "architecture_pattern": "RAG 架构",
@@ -785,12 +921,13 @@ else:
     "similarity_score": 85,
     "suggested_architecture": "Web 三层架构",
     "suggested_services": ["EC2 ASG", "RDS", "ALB"]
-  }
+  },
+  "user_provided_diagram": false
 }
 ```
 
 **后续步骤**:
-- 步骤 2: 使用案例中的架构图或生成相似架构图
+- 步骤 2: 基于案例中的架构图或生成相似架构图
 - 步骤 3: 基于案例的服务组合进行决策（减少分析时间）
 - 步骤 4: 生成针对新项目的定制化设计文档
 - 步骤 5: 验证设计的完整性和合规性
@@ -813,35 +950,47 @@ else:
 
 ## 重要提示
 
-1. **严格遵循 5 步流程**: 不可跳过或合并步骤
+1. **严格遵循 6 步流程**: 不可跳过或合并步骤
    - 步骤 0: 案例学习文件识别（可选但推荐）
    - 步骤 1: Material Parser（需求清洗）
-   - 步骤 2: Architecture Diagram Generation（架构图）
+   - 步骤 2: Architecture Diagram Generation（架构图处理与验证）
    - 步骤 3: Architecture Decisioning（架构决策）
    - 步骤 4: Design Writer（文档生成）
    - 步骤 5: Design Reviewer（质量审核）
 
-2. **主动追问**: 发现缺失的 P0 信息必须追问
+2. **尊重用户的架构图**（CRITICAL）:
+   - ✅ **如果用户提供了架构图**: 严格遵守用户的架构设计，进行验证和描述，绝不自作主张重新设计
+   - ❌ **禁止行为**:
+     - 不要说"我会为你设计一个更好的架构"
+     - 不要生成替代的架构图
+     - 不要在已有用户架构的情况下调用 MCP Server 生成新的架构图
+     - 不要强行进行 WAF 重新评估和重新设计
+   - ✅ **应该做的**:
+     - 理解、验证、描述用户的架构图
+     - 基于用户的架构进行 WAF 评估
+     - 提供可选的改进建议（非强制）
+
+3. **主动追问**: 发现缺失的 P0 信息必须追问
    - RTO/RPO、可用性要求、流量估算、AWS 区域
 
-3. **案例参考**: 优先识别和参考相关案例
+4. **案例参考**: 优先识别和参考相关案例
    - 相似案例可加速决策 50%
    - 吸取经验教训规避风险
    - 基于案例的成本数据进行预算规划
 
-4. **架构图验证**: 架构图与设计文档必须一致
+5. **架构图验证**: 架构图与设计文档必须一致
    - 服务完整性检查
    - Multi-AZ 部署检查
    - 连接关系有效性检查
    - 如果检查失败，返回步骤 1 重新分析
 
-5. **WAF 检查是强制的**: 不可跳过任何支柱的评估
+6. **WAF 检查是强制的**: 不可跳过任何支柱的评估
    - 特别注意 AI/ML 和大数据项目的特殊要求
 
-6. **防止过度设计**: 优先选择最简单可满足需求的方案
+7. **防止过度设计**: 优先选择最简单可满足需求的方案
    - 无需求不上 EKS、Service Mesh、Multi-Region
 
-7. **记录所有决策理由**: 每个技术选择都要有 Why 和 Trade-off
+8. **记录所有决策理由**: 每个技术选择都要有 Why 和 Trade-off
    - 包括架构模式选择、服务选型、配置决策
 
 8. **明确标注假设**: 所有基于假设的内容必须标注
