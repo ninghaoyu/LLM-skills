@@ -531,7 +531,7 @@ else:
 
 **执行任务**:
 
-使用 `assets/design_doc_template.md` 作为基础模板。
+使用 `templates/design_doc_template.md` 作为基础模板。
 
 **章节要求（严格按顺序，不可合并或跳过）**:
 
