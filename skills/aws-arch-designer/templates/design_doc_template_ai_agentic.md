@@ -357,9 +357,29 @@ Agent 推理 → 确定需要调用的工具
 
 ---
 
-## 8. 向量存储与知识库设计 (如适用)
+## 8. 向量存储与知识库设计 (仅当需要 RAG 增强时)
 
-### 8.1 向量数据库选择
+> **说明**: 本章节 **仅适用于包含知识库检索功能的 Agent 系统**（如企业知识库助手、专业顾问系统）。
+> 如果您的 Agent 系统不需要文档检索或知识库增强，可以跳过本章节或标注为"不适用"。
+
+### 8.1 是否需要 RAG 增强?
+
+**判断标准**:
+- ✅ **需要 RAG**: Agent 需要查询文档、知识库、企业数据库等来获取信息
+  - 例如：企业 QA 系统，需要查询内部文档
+  - 例如：专业顾问系统，需要参考行业知识库
+  - 例如：客服 Agent，需要查询 FAQ 和产品文档
+
+- ❌ **不需要 RAG**: Agent 主要执行 API 调用和工具操作
+  - 例如：API 自动化编排
+  - 例如：流程自动化（无需外部知识库）
+  - 例如：简单的数据查询和操作（直接通过 SQL 工具）
+
+**是否包含 RAG**: {REQUIRES_RAG}
+
+---
+
+### 8.2 向量数据库选择 (如需要 RAG)
 
 选择 **{VECTOR_DB_CHOICE}}** 作为向量存储。
 
@@ -375,7 +395,9 @@ Agent 推理 → 确定需要调用的工具
 
 **最终选择**: {VECTOR_DB_FINAL_CHOICE}
 
-### 8.2 Embedding 模型
+**选择理由**: {VECTOR_DB_CHOICE_WHY}
+
+### 8.3 Embedding 模型 (如需要 RAG)
 
 {EMBEDDING_MODEL_CHOICE}
 
@@ -384,9 +406,42 @@ Agent 推理 → 确定需要调用的工具
 - **存储成本**: {VECTOR_STORAGE_COST}
 - **检索成本**: {VECTOR_QUERY_COST}
 
-### 8.3 知识库同步策略
+### 8.4 知识库同步策略 (如需要 RAG)
 
 {KNOWLEDGE_BASE_SYNC_STRATEGY}
+
+**关键考虑**:
+- 文档更新频率: {DOCUMENT_UPDATE_FREQUENCY}
+- 向量更新延迟: {VECTOR_UPDATE_LATENCY}
+- 版本管理: {VECTOR_VERSION_MANAGEMENT}
+
+### 8.5 RAG 与 Agent 的集成方式 (如需要 RAG)
+
+{RAG_AGENT_INTEGRATION}
+
+**集成模式选项**:
+
+1. **RAG 作为工具 (Tool-Based)**
+   - Agent 在需要时主动调用 RAG 工具进行知识库检索
+   - 优点：Agent 可以智能决策何时需要检索、检索什么内容
+   - 缺点：增加了 Agent 的复杂度和决策成本，可能多次调用 RAG
+   - 适用场景：需要智能选择性检索的场景
+
+2. **RAG 作为上下文补充 (Context-Based)**
+   - 在 Agent 接收用户请求时，预先检索相关文档，加入 System Prompt
+   - 优点：Agent 自动获得背景信息，无需额外决策
+   - 缺点：固定检索，不够灵活；可能包含无关信息
+   - 适用场景：知识库查询相对稳定、不需要多次检索的场景
+
+3. **分阶段混合 (Hybrid)**
+   - 初始请求时进行背景检索，之后 Agent 可选择性地调用 RAG 工具进行深度检索
+   - 优点：平衡灵活性和效率，初期快速提供背景信息，后期精细化检索
+   - 缺点：实现复杂度较高，需要协调两个检索阶段
+   - 适用场景：复杂的多轮对话场景
+
+**最终选择的集成方式**: {RAG_INTEGRATION_PATTERN}
+
+**集成实现细节**: {RAG_INTEGRATION_DETAILS}
 
 ---
 
