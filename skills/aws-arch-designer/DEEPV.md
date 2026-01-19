@@ -8,60 +8,52 @@
 ### 1.2 角色定位
 **SA 的"一级设计助理"**，而非决策者。协助 SA 快速完成架构设计文档，但不替代 SA 做最终责任判断。
 
-### 1.3 输入材料特征 - 多模态批量处理
+### 1.3 输入材料特征
 
 **支持的材料格式（多模态直接处理）:**
 - 📄 **文本类**: 会议记录、需求列表、Markdown、纯文本
 - 📊 **文档类**: Word (docx)、Excel (xlsx)、PDF
 - 🖼️ **图片类**: PNG、JPEG、JPG、GIF、WebP、SVG、BMP
 - 📋 **案例学习文件**: 包含项目背景、痛点、解决方案、架构图、收益分析
-  - 可以是上述任何格式的组合
-  - 自动检测案例文件并提取结构化信息
 
-**使用方式（新增）:**
+**使用方式:**
 - ✅ **批量上传**: 用户可将所有材料集中放入某一目录
 - ✅ **单一上传**: 支持单个或多个文件同时上传
 - ✅ **混合格式**: 同时上传不同格式的文件（PDF + Excel + 图片等）
 
-**Skill 处理流程:**
+**Skill 处理能力:**
 - ✅ **多模态理解**: LLM 直接处理所有格式文件（无需专用脚本）
-  - 识别 Word/PDF 中的文本、表格、图片
-  - 识别 Excel 中的数据和图表
-  - 识别和理解架构图（PNG/JPG/PDF 中的图片）
-  - 理解 Markdown 和其他文本格式
 - ✅ **自动检测案例文件**: 识别是否为案例学习文件（无需用户标记）
 - ✅ **关键要素提取**: 自动识别功能需求、非功能需求、合规要求、预算、流量等
 - ✅ **主动追问**: 当关键信息缺失时主动追问（RTO/RPO、峰值流量、合规要求）
 
-**架构图特殊处理:**
+**架构图处理:**
 - 📸 **用户提供的架构图**: LLM 用视觉能力直接理解和验证
 - 🎨 **自动生成**: 若无架构图，通过 MCP 调用 `awslabs-aws-diagram-mcp-server` 自动生成
 
 ### 1.4 输出产物
-一份标准化的《AWS 架构设计说明书》,包含:
+一份标准化的《AWS 架构设计说明书》，包含:
 - 架构目标与设计原则
-- 总体架构说明
-  - 文字版架构图说明
-- 关键组件设计(VPC、Compute、Storage、Network、Security、Ops)
+- 总体架构说明（含架构图）
+- 关键组件设计（VPC、Compute、Storage、Network、Security、Ops）
 - 安全与合规设计
 - 高可用与灾备设计
 - 成本与扩展性说明
 - 风险、假设与待确认事项
 
-
-### 1.5 明确不做的事(边界)
+### 1.5 明确不做的事（边界）
 - ❌ 不自动"脑补"客户未给出的强约束
-- ❌ 不直接输出 IaC 代码(Terraform / CloudFormation 由其他 Skill 负责)
+- ❌ 不直接输出 IaC 代码（Terraform / CloudFormation 由其他 Skill 负责）
 - ❌ 不替代 SA 做最终判断和审批
-- ❌ 不过度设计(在需求不明确时,选择最简方案)
+- ❌ 不过度设计（在需求不明确时，选择最简方案）
 
 ---
 
 ## 二、技术架构设计
 
-### 2.1 整体流程(5-Step Pipeline)
+### 2.1 整体流程（5-Step Pipeline）
 
-这是一个**多步骤 Skill**,而非单一 Prompt。
+这是一个**多步骤 Skill**，而非单一 Prompt。
 
 ```
 ┌────────────────────────┐
@@ -80,6 +72,7 @@
 │   • 预算限制                   │
 │   • 预估流量                   │
 │ - 检测用户是否提供架构图         │
+│ - 检测是否为案例学习文件         │
 │ - 标注缺失信息                 │
 │ - 主动追问(RTO/RPO/峰值等)     │
 │ - 输出结构化 JSON              │
@@ -113,10 +106,11 @@
 └──────┬────────────────────────┘
        ↓ (设计蓝图 + WAF 评估)
 ┌──────────────────────────┐
-│ ④ Design Writer           │ ← LLM
+│ ④ Design Writer           │ ← LLM + Writing Standards
 │ - 按固定模板生成说明书       │
 │ - 强制章节完整性            │
 │ - 整合架构图信息            │
+│ - 遵循写作标准              │
 │ - 输出 Markdown 文档        │
 └──────┬────────────────────┘
        ↓
@@ -126,407 +120,75 @@
 │ - 自相矛盾检查              │
 │ - 缺失章节检查              │
 │ - 架构图与文档一致性检查     │
+│ - 运维监控完整性检查         │
 │ - 输出问题清单与修订建议     │
 └──────────────────────────┘
 ```
 
 ### 2.2 关键原则
-- **结构化优先**: 所有步骤基于结构化数据,不依赖自然语言传递
-- **模式化设计**: 使用预定义架构模式,避免 LLM 自由发挥
-- **强制检查**: Reviewer 环节必须执行,确保输出质量
-- **架构图驱动**: 优先使用用户提供的架构图; 若无提供则主动绘制, 确保视觉化表示
+- **结构化优先**: 所有步骤基于结构化数据，不依赖自然语言传递
+- **模式化设计**: 使用预定义架构模式，避免 LLM 自由发挥
+- **强制检查**: Reviewer 环节必须执行，确保输出质量
+- **架构图驱动**: 优先使用用户提供的架构图；若无提供则主动绘制，确保视觉化表示
+- **写作标准**: 严格遵循写作标准，确保文档专业、丰满、精准
 
 ---
 
-## 二-A、Architecture Diagram Generation - 架构图生成能力
+## 三、步骤详细设计
 
-### 2.A.1 输入类型与处理策略
+### 步骤 1: Material Parser（需求提取）
 
-#### Case 1: 用户提供了架构图(图片/PDF)
-**处理流程:**
-```
-用户提供的架构图
-    ↓
-使用 Vision/OCR 识别架构图内容
-    ↓
-提取架构中的 AWS 服务和连接关系
-    ↓
-生成架构图的文字描述(用于后续设计文档)
-    ↓
-验证架构图与提取的需求的匹配度
-```
+#### 3.1 核心任务
+从零散、非结构化的客户材料中提取关键信息，输出结构化 JSON。
 
-**识别能力要求:**
-- ✅ 识别标准 AWS 服务图标(EC2, RDS, Lambda, S3 等)
-- ✅ 识别架构图中的数据流和依赖关系
-- ✅ 提取关键配置信息(如 Multi-AZ, Auto Scaling 等)
-- ✅ 输出架构图文字描述(用于生成说明书的"总体架构概述"章节)
-
-**输出结构:**
-```json
-{
-  "architecture_diagram_source": "user_provided",
-  "detected_services": [
-    "Amazon EC2",
-    "Amazon RDS",
-    "Amazon S3",
-    "Application Load Balancer"
-  ],
-  "detected_relationships": [
-    {"source": "ALB", "target": "EC2", "type": "forward_traffic"},
-    {"source": "EC2", "target": "RDS", "type": "query"}
-  ],
-  "diagram_text_description": "用户提供的架构图展示了一个三层架构...",
-  "compatibility_check": {
-    "matches_requirements": true,
-    "notes": "架构图与需求基本匹配,但未明确显示备份策略"
-  }
-}
-```
-
-#### Case 2: 用户未提供架构图(仅有需求描述)
-**处理流程:**
-```
-结构化需求数据
-    ↓
-基于需求和架构模式决策
-    ↓
-构建架构蓝图(服务、连接、配置)
-    ↓
-调用 MCP Server: aws-diagram-mcp-server
-    ↓
-自动生成架构图(PNG/SVG)
-    ↓
-生成架构图的文字描述
-    ↓
-输出架构图文件 + 描述
-```
-
-**MCP Server 集成:**
-- **Server 名称**: `awslabs-aws-diagram-mcp-server`
-- **功能**: 基于架构蓝图自动生成 AWS 架构图
-- **输入**:
-  ```json
-  {
-    "services": [
-      {"name": "ALB", "type": "Application Load Balancer"},
-      {"name": "EC2", "type": "EC2 Auto Scaling Group"},
-      {"name": "RDS", "type": "RDS Multi-AZ"}
-    ],
-    "connections": [
-      {"from": "ALB", "to": "EC2", "label": "HTTP/HTTPS"},
-      {"from": "EC2", "to": "RDS", "label": "TCP 3306"}
-    ],
-    "configuration": {
-      "style": "AWS standard",
-      "layout": "multi-tier"
-    }
-  }
-  ```
-- **输出**: PNG/SVG 架构图文件
-
-**输出结构:**
-```json
-{
-  "architecture_diagram_source": "auto_generated",
-  "generation_method": "awslabs-aws-diagram-mcp-server",
-  "diagram_file": "/path/to/architecture_diagram.png",
-  "diagram_services": [
-    "Amazon EC2",
-    "Amazon RDS",
-    "Amazon S3",
-    "Application Load Balancer"
-  ],
-  "diagram_relationships": [
-    {"source": "ALB", "target": "EC2", "type": "forward_traffic"},
-    {"source": "EC2", "target": "RDS", "type": "query"}
-  ],
-  "diagram_text_description": "生成的架构图展示了一个标准的三层 Web 应用...",
-  "assumptions": [
-    "假设 EC2 实例部署在 Multiple Availability Zones",
-    "假设使用 RDS Multi-AZ 实现高可用"
-  ]
-}
-```
-
-### 2.A.2 架构图与需求的一致性检查
-
-**Checker 职责:**
-1. **服务完整性检查**
-   - 架构图中的 AWS 服务是否包含了设计阶段确定的全部服务?
-   - 是否有多余或不必要的服务?
-
-2. **设计原则一致性检查**
-   - 架构图是否体现了 Multi-AZ 部署(生产环境)?
-   - 架构图是否明确显示了负载均衡、缓存、备份等关键组件?
-
-3. **需求满足性检查**
-   - 架构图是否支持指定的可用性需求(99.9% / 99.99%)?
-   - 架构图是否支持预估的流量规模?
-
-**输出结构:**
-```json
-{
-  "consistency_check": {
-    "service_completeness": {
-      "status": "✅ Pass",
-      "details": "所有关键服务均已包含"
-    },
-    "design_principles": {
-      "status": "⚠️ Warning",
-      "details": "架构图未明确显示备份和灾备策略"
-    },
-    "requirements_coverage": {
-      "status": "✅ Pass",
-      "details": "架构支持 99.9% 可用性和 500 QPS 流量"
-    }
-  },
-  "recommendations": [
-    "建议在架构图中明确标注 AWS Backup 配置",
-    "建议标注 RTO/RPO 目标"
-  ]
-}
-```
-
-### 2.A.3 架构图的文字描述生成
-
-**目的**: 将架构图转化为可写入设计说明书"总体架构概述"章节的文字描述
-
-**输出示例:**
-```markdown
-## 3. 总体架构概述
-
-### 3.1 架构风格
-采用**三层架构模式**,包括:
-- **Presentation Layer(表现层)**: Application Load Balancer(ALB)
-- **Business Logic Layer(业务层)**: EC2 Auto Scaling Group
-- **Data Layer(数据层)**: Amazon RDS Multi-AZ
-
-### 3.2 核心组件概览
-1. **负载均衡**: Application Load Balancer
-   - 分发 HTTP/HTTPS 流量到 EC2 实例
-   - 支持跨 AZ 部署
-
-2. **计算层**: EC2 Auto Scaling Group
-   - 运行应用程序
-   - 基于 CPU 和网络利用率自动扩展
-   - 部署在 Public/Private 子网
-
-3. **数据库**: Amazon RDS for MySQL Multi-AZ
-   - 主从数据库部署在不同 AZ
-   - 支持自动故障转移
-
-4. **对象存储**: Amazon S3
-   - 存储静态资源和备份
-
-### 3.3 架构图文字描述
-[此处插入架构图 PNG/SVG]
-
-用户请求首先到达 Application Load Balancer,由 ALB 根据规则将请求转发到 EC2 Auto Scaling Group 中的实例。EC2 实例运行应用逻辑,通过 RDS 数据库连接查询数据。所有静态资源和备份文件存储在 S3 中。
-
-整个架构跨越两个可用区(Multi-AZ),当一个 AZ 发生故障时,其他 AZ 可自动接管流量,从而实现 99.9% 的可用性。
-```
-
----
-
-## 三、核心数据结构
-
-### 3.0 案例学习文件处理(Case Study Analysis)
-
-#### 3.0.1 案例学习文件的识别与解析
-
-**案例文件识别规则:**
-```python
-def detect_case_study_file(user_input):
-    """检测是否为案例学习文件"""
-    case_study_keywords = [
-        "案例", "case study", "project overview",
-        "项目背景", "painpoint", "痛点", "解决方案",
-        "solution", "architecture", "benefit", "收益",
-        "ROI", "预期效果"
-    ]
-
-    # 检查文件名和内容是否包含案例关键词
-    if any(keyword in user_input.get("filename", "").lower()
-           for keyword in case_study_keywords):
-        return True
-
-    if any(keyword in user_input.get("content", "").lower()
-           for keyword in case_study_keywords):
-        return True
-
-    return False
-```
-
-#### 3.0.2 案例学习文件的结构化提取
-
-**案例文件包含的关键部分:**
-
-| 部分 | 内容 | 提取方法 |
-|-----|------|--------|
-| **项目背景** | 客户基本情况、行业、规模 | 正则提取、关键句提取 |
-| **痛点分析** | 现状问题、瓶颈、挑战 | 关键词识别、NLP 分类 |
-| **解决方案** | AWS 服务组合、架构设计 | 服务名称识别、架构解析 |
-| **架构图** | 视觉化表示 | Vision/OCR 识别 |
-| **关键指标** | 可用性、性能、成本等 | 数值提取、单位标准化 |
-| **预期收益** | 成本节省、性能提升、时间缩短 | 数值和百分比提取 |
-
-**输出结构:**
-```json
-{
-  "is_case_study": true,
-  "case_study_metadata": {
-    "title": "案例标题",
-    "industry": "行业",
-    "company_scale": "公司规模"
-  },
-  "project_background": {
-    "description": "详细的项目背景描述",
-    "current_situation": "现状描述",
-    "industry": "所属行业",
-    "scale": "项目规模"
-  },
-  "pain_points": [
-    "痛点 1: 具体描述和影响",
-    "痛点 2: 具体描述和影响",
-    "痛点 3: 具体描述和影响"
-  ],
-  "aws_solution": {
-    "overview": "解决方案概述",
-    "services": [
-      {
-        "name": "AWS 服务名称",
-        "role": "在解决方案中的角色",
-        "key_features": ["特性 1", "特性 2"]
-      }
-    ],
-    "architecture_highlights": [
-      "架构亮点 1",
-      "架构亮点 2"
-    ]
-  },
-  "architecture_diagram": {
-    "detected": true,
-    "format": "PNG/PDF",
-    "description": "架构图文字描述"
-  },
-  "key_metrics": {
-    "availability": "99.9%",
-    "latency": "<200ms",
-    "scalability": "Auto Scaling",
-    "data_volume": "500GB",
-    "peak_qps": "500"
-  },
-  "expected_benefits": {
-    "cost_savings": {
-      "amount": "30%",
-      "baseline": "年运维成本节省"
-    },
-    "performance_improvement": {
-      "metric": "响应时间",
-      "improvement": "从 2s 到 200ms"
-    },
-    "business_impact": [
-      "用户体验提升",
-      "运维效率提高",
-      "系统可靠性增强"
-    ]
-  },
-  "lessons_learned": [
-    "经验 1",
-    "经验 2"
-  ]
-}
-```
-
-#### 3.0.3 案例学习文件与新项目的关联
-
-**使用场景:**
-1. **参考相似场景**: 当新项目与案例的行业/场景类似时,参考案例的架构和经验
-2. **加速决策**: 基于案例中验证的解决方案,加快新项目的架构决策
-3. **风险规避**: 吸取案例中的经验教训,避免重复踩坑
-4. **成本基线**: 使用案例中的成本数据作为新项目的预算参考
-
-**关联匹配规则:**
-```python
-def calculate_case_study_relevance(new_project, case_study):
-    """计算案例与新项目的相关性"""
-    relevance_score = 0
-
-    # 行业相似性 (30 分)
-    if new_project.industry == case_study.industry:
-        relevance_score += 30
-
-    # 规模相似性 (20 分)
-    if new_project.scale == case_study.scale:
-        relevance_score += 20
-
-    # 痛点相似性 (30 分)
-    matching_pain_points = len(
-        set(new_project.pain_points) & set(case_study.pain_points)
-    )
-    relevance_score += matching_pain_points * 10
-
-    # 功能需求相似性 (20 分)
-    matching_features = len(
-        set(new_project.features) & set(case_study.features)
-    )
-    relevance_score += matching_features * 10
-
-    return min(100, relevance_score)  # 0-100 分
-```
-
----
-
-### 3.1 Material Parser 工作流程
-
-#### 3.1.1 关键要素提取清单
-
-**必须提取的 5 大要素:**
+#### 3.2 关键要素提取（5 大要素）
 
 | 要素类别 | 具体内容 | 缺失时的处理策略 |
 |---------|---------|----------------|
-| **功能需求** | 系统需要实现的业务功能 | 基于上下文推断,并标注假设 |
-| **非功能需求** | 可用性、性能、延迟、扩展性 | **主动追问**,不可假设 |
-| **合规性要求** | 等保、GDPR、SOC2、行业特殊要求 | **主动追问**,默认标注为"未确认" |
-| **预算限制** | 月度/年度预算上限 | 标注为"未提供",不影响架构设计 |
-| **预估流量** | DAU、QPS、数据量、峰值倍数 | **主动追问**,影响服务选型 |
+| **功能需求** | 系统需要实现的业务功能 | 基于上下文推断，并标注假设 |
+| **非功能需求** | 可用性、性能、延迟、扩展性、RTO/RPO | **主动追问**，不可假设 |
+| **合规性要求** | 等保、GDPR、SOC2、行业特殊要求 | **主动追问**，默认标注为"未确认" |
+| **预算限制** | 月度/年度预算上限 | 标注为"未提供"，不影响架构设计 |
+| **预估流量** | DAU、QPS、数据量、峰值倍数 | **主动追问**，影响服务选型 |
 
-#### 3.1.2 主动交互机制
+#### 3.3 主动交互机制
 
-**触发追问的条件:**
-
-当以下关键信息缺失时,Skill **必须**主动提问:
-
-```python
-CRITICAL_QUESTIONS = {
-    "RTO/RPO": "您对系统的恢复时间目标(RTO)和恢复点目标(RPO)有要求吗?例如: RTO < 1h, RPO < 15min",
-    "峰值流量": "请问系统的峰值流量大约是日常流量的多少倍?例如: 2-3倍",
-    "合规要求": "是否有明确的合规性要求?例如: 等保二级、GDPR、数据本地化等",
-    "可用性要求": "对系统可用性有明确要求吗?例如: 99.9%、99.95%、99.99%",
-    "数据敏感度": "系统处理的数据是否包含敏感信息(个人信息、金融数据等)?",
-    "区域限制": "是否有明确的 AWS 区域要求?例如: 必须使用中国区、必须在欧盟境内等"
-}
-```
+**P0 关键问题（必须追问）:**
+- RTO/RPO 目标（影响灾备设计）
+- 可用性要求（影响 Multi-AZ 决策）
+- 预估流量/QPS（影响扩展策略）
+- AWS 区域（影响服务可用性）
 
 **追问策略:**
-- 一次最多追问 **3-5 个问题**,避免用户疲劳
-- 提供**选项或参考值**,降低用户理解成本
-- 对于非关键信息(如预算),可标注"未提供"并继续
+- 一次最多追问 **3-5 个问题**，避免用户疲劳
+- 提供**选项或参考值**，降低用户理解成本
+- 对于非关键信息（如预算），可标注"未提供"并继续
 
-#### 3.1.3 输出结构
+#### 3.4 案例学习文件处理
+
+**案例文件识别:**
+- 检测文件名关键词：案例、case study、迁移方案等
+- 检测内容关键词：项目背景、痛点、解决方案、收益等
+
+**提取信息:**
+- 项目背景（行业、规模、现状）
+- 痛点分析
+- AWS 解决方案（服务组合、架构模式）
+- 关键指标（可用性、性能、成本）
+- 预期收益
+- 经验教训
+
+**关联匹配:**
+- 计算案例与新项目的相关性（行业、规模、痛点、功能）
+- 提取可复用的服务和经验
+- 作为新项目的参考基线
+
+#### 3.5 输出结构
 
 ```json
 {
-  "business_goals": [
-    "支持 Web 访问",
-    "日活 10 万用户"
-  ],
-  "functional_requirements": [
-    "用户注册与登录",
-    "订单管理",
-    "支付功能"
-  ],
+  "business_goals": ["业务目标1", "业务目标2"],
+  "functional_requirements": ["功能需求1", "功能需求2"],
   "non_functional_requirements": {
     "availability": "99.9%",
     "latency": "<200ms",
@@ -546,1614 +208,274 @@ CRITICAL_QUESTIONS = {
     "network": "需要私网访问本地 IDC",
     "budget": "未提供"
   },
-  "assumptions": [
-    "用户未明确峰值流量,假设为日常流量的 3 倍"
-  ],
-  "open_questions": [
-    "是否需要多 Region 灾备?",
-    "是否需要跨境数据传输?"
-  ],
-  "user_interaction_log": [
-    {
-      "question": "对系统可用性有明确要求吗?",
-      "answer": "99.9%",
-      "timestamp": "2026-01-06 10:30:00"
-    }
-  ]
+  "assumptions": ["假设1", "假设2"],
+  "open_questions": ["待确认问题1", "待确认问题2"]
 }
 ```
 
-**字段说明:**
-- `functional_requirements`: 功能需求列表(新增)
-- `traffic_estimation`: 流量估算数据(新增)
-- `business_goals`: 业务目标列表
-- `non_functional_requirements`: 非功能需求(可用性、性能、扩展性)
-- `constraints`: 硬约束(地域、合规、网络、预算)
-- `assumptions`: 当信息不足时做出的假设(需明确标注)
-- `open_questions`: 需要客户进一步确认的问题
-- `user_interaction_log`: 交互记录(用于追溯和审计)
+---
 
-### 3.2 Material Parser 实施细节
+### 步骤 2: Architecture Diagram Generation（架构图生成）
 
-#### 3.2.1 信息清洗与识别规则
+#### 3.6 两种处理路径
 
-**零散材料处理流程:**
+**Case 1: 用户提供了架构图（图片/PDF）**
 
-```python
-# 伪代码示例
-def parse_raw_material(raw_input):
-    """处理零散输入材料"""
+处理流程:
+1. 使用 Vision/OCR 识别架构图内容
+2. 提取 AWS 服务和连接关系
+3. 生成文字描述
+4. 验证与需求的匹配度
 
-    # 0. 检测是否为案例学习文件
-    is_case_study = detect_case_study_file(raw_input)
-    if is_case_study:
-        case_study_data = extract_case_study_info(raw_input)
-        # 从案例中提取的信息可用于参考和加速决策
-        return merge_case_study_with_requirements(case_study_data, raw_input)
-
-    # 1. 识别材料类型
-    material_type = detect_material_type(raw_input)
-    # 类型: meeting_notes / requirement_list / code_snippet / case_study / mixed
-
-    # 2. 提取关键要素
-    extracted = {
-        "functional_requirements": extract_features(raw_input),
-        "non_functional": extract_nfr(raw_input),
-        "compliance": extract_compliance(raw_input),
-        "budget": extract_budget(raw_input),
-        "traffic": extract_traffic(raw_input)
-    }
-
-    # 3. 识别缺失字段
-    missing_fields = identify_missing_critical_fields(extracted)
-
-    # 4. 生成追问列表
-    questions = generate_questions(missing_fields)
-
-    # 5. 与用户交互
-    answers = interact_with_user(questions)
-
-    # 6. 合并信息
-    final_output = merge_and_structure(extracted, answers)
-
-    return final_output
-```
-
-**信息提取模式匹配表:**
-
-| 输入特征 | 可能包含的信息 | 提取策略 |
-|---------|--------------|---------|
-| 包含"用户量"、"DAU"、"QPS" | 流量估算 | 正则提取数值,单位标准化 |
-| 包含"等保"、"GDPR"、"合规" | 合规要求 | 关键词匹配 |
-| 包含"可用性"、"SLA"、"99.x%" | 可用性要求 | 提取百分比 |
-| 包含"成本"、"预算"、"万元" | 预算限制 | 提取金额和周期 |
-| 包含代码片段 | 技术栈信息 | 推断语言和框架 |
-| 包含"会议"、"讨论"关键词 | 会议记录 | 提取决策项和待办 |
-
-#### 3.2.2 追问优先级矩阵
-
-**P0 - 必须追问(阻塞设计):**
-- RTO/RPO(影响灾备设计)
-- 可用性要求(影响 Multi-AZ 决策)
-- 预估流量/QPS(影响扩展策略)
-- AWS 区域(影响服务可用性)
-
-**P1 - 强烈建议追问(影响成本和安全):**
-- 合规性要求(影响架构复杂度)
-- 数据敏感度(影响加密和访问控制)
-- 峰值流量倍数(影响 Auto Scaling 配置)
-
-**P2 - 可选追问(优化项):**
-- 预算限制(用于成本优化)
-- 运维团队技能(影响技术栈选择)
-- 现有基础设施(混合云场景)
-
-#### 3.2.3 示例: 从会议记录到结构化数据
-
-**输入材料(零散会议记录):**
-```
-会议主题: XX电商平台云迁移讨论
-参会人员: 张三(CTO)、李四(架构师)、王五(运维)
-
-关键讨论点:
-- 现有系统用 Java Spring Boot,MySQL 数据库
-- 日活大概 5-10 万,高峰期会翻倍
-- 希望迁到云上,减少运维成本
-- 数据不能出境,必须在中国
-- 老板要求 99.9% 可用性
-- 预算还没定,先出个方案
-
-待确认:
-- 是否需要容器化? (李四倾向于先用虚拟机)
-- 备份策略怎么做?
-```
-
-**Material Parser 处理流程:**
-
+输出结构:
 ```json
 {
-  "extracted_info": {
-    "functional_requirements": ["电商平台", "用户访问", "订单处理"],
-    "tech_stack": {
-      "language": "Java",
-      "framework": "Spring Boot",
-      "database": "MySQL"
-    },
-    "traffic": {
-      "dau": "50,000 - 100,000",
-      "peak_multiplier": "2x"
-    },
-    "constraints": {
-      "region": "AWS China",
-      "data_residency": "数据不得出境"
-    },
-    "non_functional": {
-      "availability": "99.9%"
-    }
-  },
-  "missing_critical_fields": ["RTO/RPO", "QPS", "数据量", "合规要求"],
-  "generated_questions": [
-    "请问对系统的 RTO(恢复时间目标)和 RPO(恢复点目标)有明确要求吗? 例如: RTO < 4h, RPO < 1h",
-    "高峰期的 QPS(每秒请求数)大约是多少? 例如: 500 QPS",
-    "当前数据库的数据量大约有多大? 例如: 100 GB",
-    "除了数据不出境,是否还有其他合规要求? 例如: 等保二级"
-  ]
-}
-```
-
-**用户回答后的最终输出:**
-```json
-{
-  "business_goals": ["云迁移", "降低运维成本", "提升可用性"],
-  "functional_requirements": ["电商平台", "用户访问", "订单处理"],
-  "non_functional_requirements": {
-    "availability": "99.9%",
-    "rto": "< 4h",
-    "rpo": "< 1h"
-  },
-  "traffic_estimation": {
-    "dau": "50,000 - 100,000",
-    "peak_qps": "500",
-    "data_volume": "200 GB",
-    "peak_multiplier": "2x"
-  },
-  "constraints": {
-    "region": "AWS China",
-    "compliance": ["等保二级", "数据不得出境"],
-    "tech_stack": "Java Spring Boot + MySQL",
-    "budget": "未提供"
-  },
-  "assumptions": [
-    "基于 Spring Boot,推荐使用 EC2 而非容器化(降低迁移成本)"
+  "architecture_diagram_source": "user_provided",
+  "detected_services": ["EC2", "RDS", "S3", "ALB"],
+  "detected_relationships": [
+    {"source": "ALB", "target": "EC2", "type": "forward_traffic"}
   ],
-  "open_questions": [
-    "是否需要 Redis 缓存来降低数据库压力?",
-    "是否需要 CDN 加速静态资源?"
-  ]
-}
-```
-
-#### 3.2.4 示例: 基于案例学习文件的架构设计
-
-**输入材料(案例学习文件):**
-```markdown
-# 电商平台云迁移案例
-
-## 项目背景
-XX 公司是一家在线电商平台,主要从事服装销售。
-- 创办于 2015 年
-- 日均用户数: 10 万
-- 目前部署在自建数据中心
-
-## 现状痛点
-1. **高运维成本**: 运维团队 5 人,年度成本 150 万
-2. **扩展困难**: 高峰期流量翻倍,无法快速扩展
-3. **可用性低**: 单点故障导致整体宕机,可用性仅 95%
-4. **迁移风险高**: 技术栈不清,依赖关系复杂
-
-## AWS 解决方案
-基于 Web 三层架构,采用以下 AWS 服务:
-- **计算**: EC2 Auto Scaling Group(t3.medium)
-- **数据库**: RDS for MySQL Multi-AZ
-- **负载均衡**: Application Load Balancer
-- **存储**: S3(静态资源和备份)
-- **缓存**: ElastiCache Redis
-- **监控**: CloudWatch + SNS
-
-### 架构图
-[包含架构图 PNG/JPEG]
-
-## 关键指标
-- **可用性**: 从 95% 提升到 99.9%
-- **响应时间**: 从 1.5s 降低到 200ms
-- **峰值 QPS**: 支持从 300 提升到 500
-- **运维成本**: 年降 40%(从 150 万到 90 万)
-- **迁移周期**: 3 个月
-
-## 预期收益
-1. **成本节省**: 年度成本节省 60 万(运维和基础设施)
-2. **性能提升**: 用户体验改善,页面加载快 70%
-3. **可扩展性**: 支持 2 倍流量增长,无需重新架构
-4. **团队效率**: 运维人员可减少到 2 人
-
-## 关键经验
-1. 提前进行应用改造,确保云友好性(无本地磁盘依赖)
-2. 数据库迁移是关键路径,需要提前规划 RTO/RPO
-3. Multi-AZ 部署虽然增加成本 15%,但大幅提升可用性
-4. 缓存策略(Redis)对性能提升至关重要
-```
-
-**Material Parser 处理流程:**
-```json
-{
-  "is_case_study": true,
-  "case_study_metadata": {
-    "title": "电商平台云迁移案例",
-    "industry": "电商",
-    "company_scale": "中型(日均 10 万用户)"
-  },
-  "project_background": {
-    "description": "XX 公司在线电商平台,主要从事服装销售,创办于 2015 年",
-    "current_scale": "日均用户 10 万",
-    "current_infra": "自建数据中心",
-    "team_size": "运维 5 人"
-  },
-  "pain_points": [
-    "高运维成本: 5 人团队年度成本 150 万",
-    "扩展困难: 高峰期流量翻倍无法快速扩展",
-    "可用性低: 单点故障导致宕机,可用性仅 95%",
-    "迁移风险: 技术栈不清,依赖关系复杂"
-  ],
-  "aws_solution": {
-    "pattern": "Web 三层架构",
-    "services": [
-      {
-        "name": "EC2 Auto Scaling Group",
-        "role": "计算层",
-        "instance_type": "t3.medium"
-      },
-      {
-        "name": "RDS for MySQL",
-        "role": "数据库",
-        "config": "Multi-AZ"
-      },
-      {
-        "name": "Application Load Balancer",
-        "role": "负载均衡"
-      },
-      {
-        "name": "Amazon S3",
-        "role": "对象存储"
-      },
-      {
-        "name": "ElastiCache Redis",
-        "role": "缓存"
-      },
-      {
-        "name": "CloudWatch",
-        "role": "监控和告警"
-      }
-    ]
-  },
-  "key_metrics": {
-    "availability": "99.9%",
-    "latency": "< 200ms",
-    "peak_qps": "500",
-    "dau": "100,000",
-    "migration_timeline": "3 months"
-  },
-  "expected_benefits": {
-    "cost_savings": {
-      "amount": "60 万/年",
-      "percentage": "40%",
-      "baseline": "150 万 → 90 万"
-    },
-    "performance": {
-      "response_time_improvement": "1.5s → 200ms(70% 提升)",
-      "peak_qps_increase": "300 → 500(67% 提升)"
-    },
-    "business_impact": [
-      "提升用户体验",
-      "支持 2 倍流量增长",
-      "运维团队可减少到 2 人"
-    ]
-  },
-  "lessons_learned": [
-    "提前进行应用改造,确保云友好性",
-    "数据库迁移是关键路径,需提前规划 RTO/RPO",
-    "Multi-AZ 虽增加 15% 成本,但大幅提升可用性",
-    "缓存策略对性能提升至关重要"
-  ],
-  "references": {
-    "architecture_diagram": "case_study_architecture.png",
-    "similarity_to_new_project": "高(同为电商平台,规模相近)"
+  "diagram_text_description": "用户提供的架构图展示了一个三层架构...",
+  "compatibility_check": {
+    "matches_requirements": true,
+    "notes": "架构图与需求基本匹配，但未明确显示备份策略"
   }
 }
 ```
 
-**新项目如何参考案例:**
-1. **架构参考**: 采用相同的 Web 三层架构模式
-2. **服务选型**: 直接参考案例验证过的服务组合
-3. **成本基线**: 基于案例的成本数据进行预算规划
-4. **风险规避**: 吸取案例关键经验,重点关注数据库迁移和缓存策略
-5. **时间规划**: 参考案例的 3 个月迁移周期进行项目规划
+**Case 2: 用户未提供架构图**
 
-### 3.3 Architecture Decisioning - 架构决策引擎
+处理流程:
+1. 基于步骤 3 的架构决策结果构建**架构蓝图**（服务列表 + 连接关系）
+2. 调用 MCP Server: `awslabs-aws-diagram-mcp-server`
+3. 传入架构蓝图（JSON 格式）
+4. 生成 PNG/SVG 架构图文件
+5. 生成文字描述
+6. 整合到设计文档
 
-**这是整个 Skill 最关键的"思考"步骤**,负责将结构化需求映射为具体的 AWS 架构设计。
+输出结构:
+```json
+{
+  "architecture_diagram_source": "auto_generated",
+  "generation_method": "awslabs-aws-diagram-mcp-server",
+  "diagram_file": "architecture_diagram.png",
+  "diagram_services": ["EC2", "RDS", "S3", "ALB"],
+  "diagram_text_description": "生成的架构图展示了一个标准的三层 Web 应用...",
+  "assumptions": ["假设 EC2 实例部署在 Multi-AZ"]
+}
+```
 
-#### 3.3.1 核心任务
+#### 3.7 架构图一致性检查
 
-1. **服务选型 (Service Selection)**
-   - 将需求映射到具体 AWS 服务
-   - 进行服务间的对比与权衡
-   - 输出选择理由和替代方案
+**检查项:**
+- [ ] 服务完整性：架构图是否包含所有确定的服务？
+- [ ] 设计原则一致性：是否体现 Multi-AZ、负载均衡、备份等？
+- [ ] 需求满足性：是否支持可用性、流量规模要求？
 
-2. **AWS Well-Architected Framework 检查**
-   - 强制基于 WAF 六大支柱进行推理
+---
+
+### 步骤 3: Architecture Decisioning（架构决策）⭐ 最关键
+
+#### 3.8 核心任务
+
+1. **服务选型决策树**
+   - 需求 → 候选服务列表
+   - 基于约束筛选（Region/合规/预算）
+   - 候选服务对比评估（Pros/Cons/成本）
+   - 输出推荐 + 替代方案 + Why + Trade-off
+
+2. **AWS Well-Architected Framework 强制检查**
+   - 六大支柱逐一评估
    - 确保设计符合最佳实践
-   - 识别潜在的架构风险
+   - 识别潜在风险
 
-#### 3.3.2 服务选型决策树
-
-**决策流程:**
-
-```
-需求分类
-    ↓
-服务候选列表生成
-    ↓
-基于约束条件筛选
-    ↓
-WAF 六大支柱评估
-    ↓
-最终推荐 + 替代方案
-```
-
-**通用服务决策表:**
-
-| 需求类型 | 关键约束 | 候选服务 | 决策依据 |
-|---------|---------|---------|---------|
-| 托管数据库 | 高可用、低运维 | RDS vs Aurora | Aurora: 性能更优但成本更高;<br>RDS: 成本友好,满足大部分场景 |
-| 无服务器计算 | 按需扩展、无需管理 | Lambda vs Fargate | Lambda: 事件驱动、短任务;<br>Fargate: 长任务、容器化应用 |
-| 对象存储 | 大规模、低成本 | S3 (唯一选择) | 标准/IA/Glacier 根据访问频率选择 |
-| 缓存 | 低延迟读取 | ElastiCache Redis vs Memcached | Redis: 持久化、复杂数据结构;<br>Memcached: 简单缓存 |
-| 负载均衡 | HTTP/HTTPS 流量 | ALB vs NLB | ALB: 7 层、支持路径路由;<br>NLB: 4 层、超高性能 |
-
-**AI/ML 项目服务决策表:**
-
-| 需求类型 | 关键约束 | 候选服务 | 决策依据 |
-|---------|---------|---------|---------|
-| **LLM 推理** | 成本、性能、功能 | Bedrock vs SageMaker | Bedrock: 托管模型、按 Token 计费、快速上线;<br>SageMaker: 自定义模型、实例计费、灵活性高 |
-| **模型选择** | 任务类型、成本 | Claude 3.5 vs Llama 3 vs Titan | Claude: 推理能力强、多模态;<br>Llama: 开源、成本低;<br>Titan: AWS 原生、低成本 |
-| **向量数据库** | 规模、性能、成本 | OpenSearch Serverless vs Kendra vs pgvector | OpenSearch: 灵活、成本优化;<br>Kendra: 开箱即用、企业级;<br>pgvector: 混合查询 |
-| **知识库** | 文档类型、规模 | Bedrock KB vs Kendra | Bedrock KB: 自动向量化、简单;<br>Kendra: 企业搜索、复杂文档 |
-| **Agent 框架** | 复杂度、集成 | Bedrock Agents vs LangChain (Lambda) | Bedrock Agents: 托管、集成度高;<br>LangChain: 灵活、社区生态 |
-| **模型部署** | 流量、延迟 | SageMaker Real-time vs Serverless vs Batch | Real-time: 低延迟、稳定流量;<br>Serverless: 不定期流量;<br>Batch: 批量推理 |
-
-**大数据项目服务决策表:**
-
-| 需求类型 | 关键约束 | 候选服务 | 决策依据 |
-|---------|---------|---------|---------|
-| **离线分析** | 数据量、查询频率 | Athena vs Redshift | Athena: 即席查询、按查询付费、TB 级;<br>Redshift: 频繁查询、预留实例、PB 级 |
-| **ETL 处理** | 复杂度、运维 | Glue vs EMR | Glue: Serverless、简单 ETL、自动扩展;<br>EMR: 复杂逻辑、Spark/Hadoop 生态 |
-| **实时流** | 吞吐量、生态 | Kinesis vs MSK (Kafka) | Kinesis: 托管、AWS 集成、简单;<br>MSK: Kafka 生态、高吞吐、复杂 |
-| **流处理** | 逻辑复杂度 | Lambda vs Kinesis Data Analytics (Flink) | Lambda: 简单转换、事件驱动;<br>Flink: 复杂窗口、状态计算 |
-| **数据仓库** | 规模、并发 | Redshift vs Redshift Serverless | Redshift: 大规模、稳定负载、成本优化;<br>Serverless: 不定期查询、自动扩展 |
-| **数据湖查询** | 数据格式、性能 | Athena vs Redshift Spectrum | Athena: 标准 SQL、按查询付费;<br>Spectrum: Redshift 集成、复杂查询 |
-
-#### 3.3.3 AWS Well-Architected Framework 强制检查
-
-**六大支柱评估矩阵:**
-
-每个架构设计必须显式回答以下问题:
+#### 3.9 WAF 六大支柱检查
 
 ##### 1️⃣ 卓越运营 (Operational Excellence)
-- [ ] 是否定义了运维流程和标准?
-- [ ] 是否使用 IaC(Infrastructure as Code)?
-- [ ] 是否配置了自动化运维工具(Systems Manager)?
-- [ ] 是否建立了变更管理流程?
+- [ ] 是否定义了运维流程和标准？
+- [ ] 是否使用 IaC（CloudFormation/Terraform）？
+- [ ] 是否配置了日志聚合（CloudWatch Logs）？
+- [ ] 是否配置了自动化运维（Systems Manager）？
+- [ ] 是否建立了变更管理流程？
 
 **检查点:**
 - CloudWatch Logs 日志聚合
 - EventBridge 自动化响应
 - Systems Manager 补丁管理
-- CloudFormation/Terraform IaC
+- IaC 代码管理
 
 ##### 2️⃣ 安全性 (Security)
-- [ ] 是否遵循最小权限原则(IAM)?
-- [ ] 是否启用静态数据加密?
-- [ ] 是否启用传输加密(TLS)?
-- [ ] 是否配置网络隔离(VPC/Security Group)?
-- [ ] 是否启用审计日志(CloudTrail)?
+- [ ] 是否遵循最小权限原则（IAM）？
+- [ ] 是否启用静态数据加密（KMS）？
+- [ ] 是否启用传输加密（TLS）？
+- [ ] 是否配置网络隔离（VPC/Security Group）？
+- [ ] 是否启用审计日志（CloudTrail）？
 
 **检查点:**
-- IAM 角色(禁止使用 Root)
+- IAM 角色（禁止使用 Root）
 - KMS 密钥管理
-- WAF 防护(若有公网暴露)
+- WAF 防护（若有公网暴露）
 - MFA 多因素认证
 - VPC Flow Logs
 
 ##### 3️⃣ 可靠性 (Reliability)
-- [ ] 是否实现 Multi-AZ 部署?
-- [ ] 是否配置自动故障转移?
-- [ ] 是否定义了 RTO/RPO?
-- [ ] 是否配置了备份策略?
-- [ ] 是否进行了容量规划?
+- [ ] 是否实现 Multi-AZ 部署？
+- [ ] 是否配置自动故障转移？
+- [ ] 是否定义了 RTO/RPO？
+- [ ] 是否配置了备份策略？
+- [ ] 是否进行了容量规划？
 
 **检查点:**
 - RDS Multi-AZ / Aurora Replicas
 - Auto Scaling 组配置
-- 备份策略(AWS Backup / Snapshot)
+- 备份策略（AWS Backup / Snapshot）
 - Route 53 健康检查
 
 ##### 4️⃣ 性能效率 (Performance Efficiency)
-- [ ] 是否选择了适合工作负载的实例类型?
-- [ ] 是否使用了缓存机制?
-- [ ] 是否启用了 CDN(若适用)?
-- [ ] 是否优化了数据库查询?
+- [ ] 是否选择了适合工作负载的实例类型？
+- [ ] 是否使用了缓存机制？
+- [ ] 是否启用了 CDN（若适用）？
+- [ ] 是否优化了数据库查询？
 
 **检查点:**
-- 实例类型选择(计算优化/内存优化/通用)
+- 实例类型选择（计算优化/内存优化/通用）
 - ElastiCache / DAX 缓存
 - CloudFront CDN
 - RDS 性能洞察
 
 ##### 5️⃣ 成本优化 (Cost Optimization)
-- [ ] 是否使用了 Auto Scaling 避免资源浪费?
-- [ ] 是否考虑了 Reserved Instance / Savings Plans?
-- [ ] 是否配置了 S3 生命周期策略?
-- [ ] 是否启用了成本监控(Cost Explorer)?
+- [ ] 是否使用了 Auto Scaling 避免资源浪费？
+- [ ] 是否考虑了 Reserved Instance / Savings Plans？
+- [ ] 是否配置了 S3 生命周期策略？
+- [ ] 是否启用了成本监控（Cost Explorer）？
 
 **检查点:**
 - Auto Scaling 策略
 - S3 Intelligent-Tiering / Glacier
-- Spot Instances(非关键工作负载)
-- 成本告警(Budgets)
+- Spot Instances（非关键工作负载）
+- 成本告警（Budgets）
 
 ##### 6️⃣ 可持续性 (Sustainability)
-- [ ] 是否选择了能效更高的实例类型(Graviton)?
-- [ ] 是否优化了资源利用率?
-- [ ] 是否选择了绿色能源的 Region?
+- [ ] 是否选择了能效更高的实例类型（Graviton）？
+- [ ] 是否优化了资源利用率？
+- [ ] 是否选择了绿色能源的 Region？
 
 **检查点:**
-- Graviton 实例(ARM 架构)
-- Serverless 优先(按需计费)
+- Graviton 实例（ARM 架构）
+- Serverless 优先（按需计费）
 - 自动关闭开发/测试环境
 
----
+#### 3.10 AI/ML 项目的特殊 WAF 检查
 
-#### 3.3.3.1 AI/ML 项目的特殊 WAF 检查
+**额外检查维度:**
 
-**AI/ML 项目在 WAF 六大支柱基础上,需额外考虑以下维度:**
+**1. AI 成本优化**
+- [ ] Token 成本控制（单次请求 Token 上限、Prompt 缓存）
+- [ ] 推理成本优化（SageMaker Auto Scaling、Serverless Inference）
+- [ ] 向量数据库成本（OpenSearch Serverless、Index 生命周期）
 
-##### 🤖 AI 特有检查点
+**2. AI 性能效率**
+- [ ] 推理延迟（满足业务 SLA、缓存、Provisioned Throughput）
+- [ ] 模型选择（模型大小匹配任务复杂度）
+- [ ] 批处理优化（Batch Transform、合并请求）
 
-**1. 成本优化 (AI Cost Optimization)**
-- [ ] **Token 成本控制**
-  - 是否设置单次请求 Token 上限?
-  - 是否使用 Prompt 缓存减少重复调用?
-  - 是否根据任务选择合适的模型(Claude vs Llama vs Titan)?
-- [ ] **推理成本优化**
-  - SageMaker Endpoint 是否使用 Auto Scaling?
-  - 是否考虑 Serverless Inference(不定期流量)?
-  - 训练是否使用 Spot Instances?
-- [ ] **向量数据库成本**
-  - 是否选择 OpenSearch Serverless 而非常驻集群?
-  - 是否配置 Index 生命周期策略?
+**3. AI 安全性**
+- [ ] 数据隐私（训练数据加密、VPC Endpoints、不记录数据）
+- [ ] Prompt Injection 防护（输入过滤、System Prompt 保护）
+- [ ] 模型访问控制（IAM 细粒度权限、CloudTrail 审计）
 
-**2. 性能效率 (AI Performance)**
-- [ ] **推理延迟**
-  - 是否满足业务 SLA(如 <500ms)?
-  - 是否使用缓存(Redis)减少重复推理?
-  - 是否配置 Provisioned Throughput(高并发)?
-- [ ] **模型选择**
-  - 模型大小是否匹配任务复杂度(避免大材小用)?
-  - 是否测试过多个模型的性能/成本比?
-- [ ] **批处理优化**
-  - 批量推理是否使用 Batch Transform?
-  - 是否合并多个请求减少 API 调用?
+**4. AI 可靠性**
+- [ ] 降级策略（备用模型、超时重试）
+- [ ] 幻觉检测（Guardrails、RAG 事实依据）
+- [ ] 版本管理（Model Registry、A/B 测试）
 
-**3. 安全性 (AI Security)**
-- [ ] **数据隐私**
-  - 训练数据是否加密存储(S3 + KMS)?
-  - 是否使用 VPC Endpoints 避免公网传输?
-  - Bedrock 是否选择不记录数据的模型?
-- [ ] **Prompt Injection 防护**
-  - 是否对用户输入进行过滤和验证?
-  - 是否限制 System Prompt 不被覆盖?
-- [ ] **模型访问控制**
-  - 是否使用 IAM 细粒度控制模型调用权限?
-  - 是否启用 CloudTrail 审计 API 调用?
+**5. MLOps（卓越运营）**
+- [ ] 监控（性能指标、数据漂移、Prompt/Response 日志）
+- [ ] 持续优化（模型重训练、用户反馈）
 
-**4. 可靠性 (AI Reliability)**
-- [ ] **降级策略**
-  - 当主模型不可用时,是否有备用模型?
-  - 是否设置超时和重试机制?
-- [ ] **幻觉检测**
-  - 是否对 LLM 输出进行验证(如 Guardrails)?
-  - 是否结合 RAG 提供事实依据?
-- [ ] **版本管理**
-  - 模型是否版本化(SageMaker Model Registry)?
-  - 是否支持 A/B 测试和回滚?
+#### 3.11 大数据项目的特殊 WAF 检查
 
-**5. 卓越运营 (AI Operations - MLOps)**
-- [ ] **监控与可观测性**
-  - 是否监控模型性能指标(准确率、延迟、成本)?
-  - 是否配置 SageMaker Model Monitor(数据漂移检测)?
-  - 是否记录 Prompt/Response 用于调试?
-- [ ] **持续优化**
-  - 是否建立模型重训练流程?
-  - 是否收集用户反馈优化 Prompt?
+**额外检查维度:**
 
----
+**1. 大数据成本优化**
+- [ ] 存储成本（S3 生命周期、Intelligent-Tiering、过期数据删除）
+- [ ] 计算成本（EMR 临时集群、Spot Instances、Redshift RI）
+- [ ] 数据传输成本（VPC Endpoints、跨 Region 复制必要性）
 
-#### 3.3.3.2 大数据项目的特殊 WAF 检查
+**2. 大数据性能效率**
+- [ ] 查询性能（S3 分区、列式存储、Athena 优化）
+- [ ] 数据处理性能（EMR 实例类型、Glue DPU、Kinesis Shard）
+- [ ] 并发控制（Redshift 并发扩展、Athena 并发限制）
 
-**大数据项目在 WAF 六大支柱基础上,需额外考虑以下维度:**
+**3. 大数据可靠性**
+- [ ] 数据一致性（去重逻辑、Exactly-Once 语义）
+- [ ] 容错机制（EMR 自动恢复、Glue Bookmark、死信队列）
+- [ ] 数据质量（Glue Data Quality、Schema 验证）
 
-##### 📊 大数据特有检查点
+**4. 大数据安全性**
+- [ ] 数据加密（S3/Redshift/Kinesis 加密）
+- [ ] 访问控制（Lake Formation 细粒度权限、最小权限）
+- [ ] 数据脱敏（敏感数据处理、Glue DataBrew）
 
-**1. 成本优化 (Big Data Cost)**
-- [ ] **存储成本**
-  - S3 是否配置生命周期策略(Standard → IA → Glacier)?
-  - 是否使用 S3 Intelligent-Tiering 自动优化?
-  - 是否删除/归档过期数据?
-- [ ] **计算成本**
-  - EMR 是否使用临时集群(用后即删)?
-  - 是否使用 Spot Instances(非关键任务)?
-  - Redshift 是否使用 Reserved Instances / Serverless?
-- [ ] **数据传输成本**
-  - 是否使用 VPC Endpoints 避免公网流量费?
-  - 跨 Region 复制是否必要?
+**5. 数据治理（卓越运营）**
+- [ ] 监控（ETL Job 失败率、数据积压、查询性能）
+- [ ] 数据治理（Glue Catalog、保留策略、数据血缘）
+- [ ] 自动化（调度工具、数据质量检查）
 
-**2. 性能效率 (Big Data Performance)**
-- [ ] **查询性能**
-  - S3 数据是否合理分区(按日期/地区)?
-  - 是否使用列式存储(Parquet/ORC)?
-  - Athena 查询是否优化(避免 SELECT *)?
-- [ ] **数据处理性能**
-  - EMR 实例类型是否适配工作负载(计算 vs 内存)?
-  - Glue Job 是否配置合理的 DPU 数量?
-  - Kinesis Shard 数量是否满足吞吐量?
-- [ ] **并发控制**
-  - Redshift 并发扩展是否启用?
-  - Athena 查询是否限制并发数?
+#### 3.12 架构模式库（13 个预定义模式）
 
-**3. 可靠性 (Big Data Reliability)**
-- [ ] **数据一致性**
-  - 是否处理重复数据(去重逻辑)?
-  - 流处理是否支持 Exactly-Once 语义?
-- [ ] **容错机制**
-  - EMR 是否配置自动恢复?
-  - Glue Job 是否支持 Bookmark(断点续传)?
-  - 是否配置死信队列(DLQ)?
-- [ ] **数据质量**
-  - 是否配置 Glue Data Quality 检查?
-  - 是否验证数据 Schema?
+**传统应用架构（4 个）:**
+1. **Web 三层架构** - ALB + EC2 ASG + RDS Multi-AZ
+2. **Serverless API** - API Gateway + Lambda + DynamoDB
+3. **SaaS 多租户** - 租户隔离策略 + 资源池设计
+4. **混合云/专线** - Direct Connect + VPN + Transit Gateway
 
-**4. 安全性 (Big Data Security)**
-- [ ] **数据加密**
-  - S3 是否启用服务端加密(SSE-S3/SSE-KMS)?
-  - Redshift 是否启用加密?
-  - Kinesis 是否启用传输加密?
-- [ ] **访问控制**
-  - 是否使用 Lake Formation 细粒度权限?
-  - 是否遵循最小权限原则(IAM)?
-  - 是否启用 S3 Bucket Policy 限制访问?
-- [ ] **数据脱敏**
-  - 敏感数据是否脱敏处理?
-  - 是否使用 Glue DataBrew 进行数据清洗?
+**大数据与分析架构（4 个）:**
+5. **批量数据处理平台** - S3 + Glue + Athena/Redshift
+6. **实时数据处理平台** - Kinesis + Lambda + DynamoDB
+7. **数据湖架构** - S3 + Lake Formation + Glue Catalog
+8. **大数据计算集群** - EMR (Hadoop/Spark) + S3
 
-**5. 卓越运营 (Big Data Operations)**
-- [ ] **监控与告警**
-  - 是否监控 ETL Job 失败率?
-  - 是否配置 Kinesis 数据积压告警?
-  - Redshift 查询性能是否监控?
-- [ ] **数据治理**
-  - 是否建立数据目录(Glue Catalog)?
-  - 是否定义数据保留策略?
-  - 是否记录数据血缘关系?
-- [ ] **自动化**
-  - ETL 是否使用调度工具(Step Functions / MWAA)?
-  - 是否自动化数据质量检查?
-
-#### 3.3.4 服务选型示例
-
-**场景: 需要托管关系型数据库**
-
-```json
-{
-  "requirement": "托管关系型数据库,MySQL 兼容,需要高可用",
-  "candidates": [
-    {
-      "service": "Amazon RDS for MySQL",
-      "pros": [
-        "完全托管,自动备份",
-        "Multi-AZ 部署实现高可用",
-        "成本相对较低"
-      ],
-      "cons": [
-        "性能不如 Aurora",
-        "扩展能力有限(最大 64 TiB)"
-      ],
-      "waf_assessment": {
-        "operational_excellence": "✅ 自动补丁管理",
-        "security": "✅ 支持 KMS 加密",
-        "reliability": "✅ Multi-AZ 自动故障转移",
-        "performance": "⚠️ 读副本扩展有限",
-        "cost": "✅ 按需实例 + RI 优化",
-        "sustainability": "⚠️ 标准实例,非 Graviton"
-      },
-      "recommended_for": "成本敏感、中等规模的 Web 应用"
-    },
-    {
-      "service": "Amazon Aurora MySQL",
-      "pros": [
-        "性能是 RDS 的 5 倍",
-        "自动扩展存储(最大 128 TiB)",
-        "支持 Global Database(跨 Region)"
-      ],
-      "cons": [
-        "成本比 RDS 高 20-30%",
-        "复杂度稍高"
-      ],
-      "waf_assessment": {
-        "operational_excellence": "✅ 自动补丁 + Backtrack",
-        "security": "✅ KMS 加密 + IAM 认证",
-        "reliability": "✅✅ 6 副本跨 3 AZ",
-        "performance": "✅✅ 高性能 + 读副本",
-        "cost": "⚠️ 成本较高",
-        "sustainability": "⚠️ 标准实例"
-      },
-      "recommended_for": "高性能要求、大规模应用、需要 Global 部署"
-    }
-  ],
-  "final_recommendation": {
-    "choice": "Amazon RDS for MySQL",
-    "reason": "基于需求分析,客户流量为 10 万 DAU,属于中等规模。RDS Multi-AZ 可满足高可用要求,成本更优。若未来流量增长 10 倍以上,建议迁移至 Aurora。",
-    "alternative": "若预算允许或性能要求极高,可直接选择 Aurora"
-  }
-}
-```
-
-#### 3.3.5 架构模式库
-
-**模式定义结构:**
-
-```json
-{
-  "pattern_name": "Three-Tier Web Application",
-  "applicable_when": ["Web 应用", "需要数据库", "中等并发"],
-  "default_services": {
-    "compute": ["EC2 Auto Scaling Group"],
-    "load_balancer": ["Application Load Balancer"],
-    "database": ["RDS Multi-AZ"],
-    "storage": ["S3"],
-    "cache": ["ElastiCache (可选)"]
-  },
-  "network": {
-    "vpc": "Multi-AZ VPC",
-    "subnet_tiers": ["Public", "Private", "Database"]
-  },
-  "waf_compliance": {
-    "operational_excellence": "CloudWatch + Systems Manager",
-    "security": "IAM + Security Groups + KMS",
-    "reliability": "Multi-AZ + Auto Scaling",
-    "performance": "ElastiCache + CloudFront(可选)",
-    "cost": "Auto Scaling + RI",
-    "sustainability": "Auto Scaling 优化资源利用率"
-  }
-}
-```
-
-**内置模式库:**
-
-#### 传统应用架构
-
-1. **Web 三层架构**
-   - **核心服务**: ALB + EC2 ASG + RDS Multi-AZ
-   - **适用场景**: 传统 Web 应用、中等并发
-   - **流量规模**: 10 万 - 100 万 DAU
-
-2. **Serverless API**
-   - **核心服务**: API Gateway + Lambda + DynamoDB
-   - **适用场景**: 轻量级 API、按需扩展
-   - **流量规模**: 不定期流量、事件驱动
-
-3. **SaaS 多租户**
-   - **核心服务**: 租户隔离策略 + 资源池设计
-   - **适用场景**: SaaS 应用、多租户管理
-   - **关键考虑**: 数据隔离、计费、资源配额
-
-4. **混合云 / 专线**
-   - **核心服务**: Direct Connect + VPN + Transit Gateway
-   - **适用场景**: 本地 IDC + 云混合部署
-   - **关键考虑**: 网络延迟、数据传输成本
-
-#### 大数据与分析架构
-
-5. **批量数据处理平台 (Batch Data Pipeline)**
-   - **核心服务**: S3 + AWS Glue + Athena / Redshift
-   - **适用场景**: 离线数据分析、ETL、BI 报表
-   - **数据规模**: TB - PB 级
-   - **处理模式**: 定时批处理、T+1 数据
-   - **典型流程**:
-     ```
-     数据源 → S3 (Data Lake) → Glue ETL →
-     Athena (即席查询) / Redshift (数据仓库) → QuickSight (BI)
-     ```
-   - **关键决策**:
-     - Athena vs Redshift: 查询频率和复杂度
-     - Glue vs EMR: 数据转换复杂度
-     - S3 分区策略: 查询性能优化
-
-6. **实时数据处理平台 (Real-time Streaming)**
-   - **核心服务**: Kinesis Data Streams + Kinesis Data Analytics + Lambda + DynamoDB
-   - **适用场景**: IoT 数据、日志分析、实时监控、金融交易
-   - **数据规模**: 百万级 TPS
-   - **处理延迟**: 毫秒 - 秒级
-   - **典型流程**:
-     ```
-     数据源 → Kinesis Data Streams →
-     Kinesis Data Analytics (实时分析) / Lambda (处理) →
-     DynamoDB (存储) / S3 (归档) / CloudWatch (监控)
-     ```
-   - **关键决策**:
-     - Kinesis vs Kafka (MSK): 运维复杂度、生态兼容性
-     - Lambda vs Flink (KDA): 处理逻辑复杂度
-     - 数据保留策略: 成本 vs 合规要求
-
-7. **数据湖架构 (Data Lake)**
-   - **核心服务**: S3 + Lake Formation + Glue Catalog + Athena + Redshift Spectrum
-   - **适用场景**: 多源异构数据、数据科学、ML 训练
-   - **数据规模**: PB - EB 级
-   - **架构层次**:
-     - Raw Zone (S3): 原始数据
-     - Curated Zone (S3 + Glue): 清洗后数据
-     - Analytics Zone (Athena/Redshift): 分析层
-   - **关键决策**:
-     - 数据分区策略: 年/月/日
-     - 数据格式: Parquet / ORC (列式存储优化查询)
-     - 访问控制: Lake Formation 细粒度权限
-
-8. **大数据计算集群 (Big Data Cluster)**
-   - **核心服务**: EMR (Hadoop/Spark) + S3 + Glue Catalog
-   - **适用场景**: 复杂 ETL、机器学习训练、图计算
-   - **数据规模**: TB - PB 级
-   - **计算模式**: 批处理 + 交互式查询
-   - **关键决策**:
-     - EMR vs Glue: 作业复杂度和定制需求
-     - Spot Instances: 成本优化(非关键任务)
-     - 集群生命周期: 常驻 vs 临时集群
-
-#### AI/ML 与 Agentic 架构
-
-9. **GenAI 应用架构 (Generative AI Application)**
-   - **核心服务**: Amazon Bedrock + Lambda + API Gateway + DynamoDB + S3
-   - **适用场景**: 聊天机器人、内容生成、文档摘要、代码辅助
-   - **典型流程**:
-     ```
-     用户请求 → API Gateway → Lambda (业务逻辑) →
-     Bedrock (LLM 推理) → DynamoDB (会话存储) →
-     S3 (文档/知识库) → 用户响应
-     ```
-   - **关键决策**:
-     - 模型选择: Claude / Llama / Titan (性能 vs 成本 vs 功能)
-     - Prompt 缓存: 降低成本
-     - 上下文管理: DynamoDB vs RDS
-     - 成本控制: Token 限制、Rate Limiting
-
-10. **RAG 架构 (Retrieval-Augmented Generation)**
-    - **核心服务**: Bedrock Knowledge Bases + OpenSearch Serverless / Kendra + S3 + Lambda
-    - **适用场景**: 企业知识库问答、文档检索、客服助手
-    - **典型流程**:
-      ```
-      文档上传 → S3 → Bedrock Knowledge Base (自动向量化) →
-      OpenSearch Serverless (向量存储) →
-      用户查询 → 向量检索 → 相关文档 → Bedrock (生成答案)
-      ```
-    - **关键决策**:
-      - 向量数据库选择:
-        - OpenSearch Serverless: 成本优化、无需运维
-        - Kendra: 开箱即用、企业级搜索
-        - Aurora pgvector: 结构化+向量混合查询
-      - Embedding 模型: Titan Embeddings vs 第三方
-      - 检索策略: Top-K、相似度阈值
-
-11. **AI Agentic 系统架构 (Multi-Agent System)**
-    - **核心服务**: Bedrock Agents + Lambda (Tools) + DynamoDB + Step Functions + EventBridge
-    - **适用场景**: 自主任务执行、多步骤工作流、API 编排
-    - **架构组件**:
-      - **Agent Orchestrator**: Bedrock Agents (任务规划、推理)
-      - **Action Groups**: Lambda Functions (工具调用)
-      - **Memory**: DynamoDB (会话状态、历史记录)
-      - **Workflow**: Step Functions (复杂多步骤编排)
-      - **Event-Driven**: EventBridge (异步任务触发)
-    - **典型流程**:
-      ```
-      用户意图 → Bedrock Agent (规划) →
-      选择 Action Group → Lambda (执行工具) →
-      外部 API / 数据库查询 →
-      Agent (综合结果) → 用户响应
-      ```
-    - **关键决策**:
-      - Agent vs Lambda 编排: 任务复杂度、动态性
-      - 工具设计: RESTful API / SDK 封装
-      - 状态管理: DynamoDB TTL 策略
-      - 错误处理: 重试机制、降级策略
-
-12. **ML 训练与推理平台 (MLOps)**
-    - **核心服务**: SageMaker + S3 + ECR + Model Registry + Endpoints
-    - **适用场景**: 自定义模型训练、模型部署、A/B 测试
-    - **架构层次**:
-      - **数据准备**: SageMaker Data Wrangler + S3
-      - **模型训练**: SageMaker Training Jobs (Spot Instances)
-      - **模型注册**: SageMaker Model Registry
-      - **模型部署**: SageMaker Endpoints (Real-time / Serverless / Batch)
-      - **监控**: SageMaker Model Monitor + CloudWatch
-    - **典型流程**:
-      ```
-      数据准备 → 特征工程 → 模型训练 →
-      模型评估 → 模型注册 → 部署到 Endpoint →
-      在线推理 / 批量推理 → 监控 → 重训练
-      ```
-    - **关键决策**:
-      - 实例类型: GPU (训练) vs CPU (推理)
-      - Endpoint 类型:
-        - Real-time: 低延迟要求
-        - Serverless: 不定期流量
-        - Batch Transform: 批量推理
-      - Auto Scaling: 基于调用量动态扩展
-      - 成本优化: Spot Instances (训练)、Serverless (推理)
-
-13. **多模态 AI 架构 (Multimodal AI)**
-    - **核心服务**: Bedrock (Multimodal Models) + Rekognition + Textract + Transcribe + S3
-    - **适用场景**: 图像识别、文档理解、语音转文字、视频分析
-    - **典型流程**:
-      ```
-      多模态输入 (图片/PDF/音频/视频) → S3 →
-      预处理 (Textract/Rekognition/Transcribe) →
-      结构化数据 → Bedrock (多模态推理) →
-      DynamoDB (结果存储) → 应用层
-      ```
-    - **关键决策**:
-      - 专用服务 vs 通用 LLM:
-        - Rekognition: 标准图像识别
-        - Bedrock Claude 3: 自定义图像理解
-      - 数据格式转换: 异步处理 vs 实时
-      - 成本优化: 批量处理 vs 实时推理
-
-#### 架构模式选择决策树
-
-```python
-def select_architecture_pattern(requirements):
-    """根据需求选择架构模式"""
-
-    # 1. AI/ML 项目识别
-    if has_ai_ml_requirements(requirements):
-        if "LLM" in requirements or "生成式 AI" in requirements:
-            if "任务编排" in requirements or "多步骤工作流" in requirements or "API 自动化" in requirements:
-                # AI Agentic 系统可以 **选择性** 包含 RAG
-                # 判断是否需要知识库增强
-                if "知识库" in requirements or "文档检索" in requirements:
-                    return "AI Agentic 系统架构 + RAG 增强"
-                else:
-                    return "AI Agentic 系统架构 (无 RAG)"
-
-            elif "知识库" in requirements or "文档检索" in requirements or "语义搜索" in requirements:
-                # 纯知识库问答,不需要任务编排,使用 RAG
-                return "RAG 架构"
-            else:
-                # 简单的 LLM 调用,无任务编排、无知识库
-                return "GenAI 应用架构"
-
-        elif "图像" in requirements or "视频" in requirements or "语音" in requirements:
-            return "多模态 AI 架构"
-
-        elif "自定义模型" in requirements or "模型训练" in requirements:
-            return "ML 训练与推理平台"
-
-    # 2. 大数据项目识别
-    if has_bigdata_requirements(requirements):
-        data_volume = requirements.get("data_volume")
-        processing_mode = requirements.get("processing_mode")
-
-        if processing_mode == "实时" or "流数据" in requirements:
-            return "实时数据处理平台"
-
-        elif data_volume in ["PB", "EB"] and "数据湖" in requirements:
-            return "数据湖架构"
-
-        elif "复杂 ETL" in requirements or "Spark" in requirements:
-            return "大数据计算集群"
-
-        else:
-            return "批量数据处理平台"
-
-    # 3. 传统应用识别
-    if "Web 应用" in requirements:
-        return "Web 三层架构"
-
-    elif "API" in requirements and "Serverless" in requirements:
-        return "Serverless API"
-
-    elif "混合云" in requirements or "专线" in requirements:
-        return "混合云 / 专线"
-
-    else:
-        return "需要进一步明确需求"
-```
-
-**架构模式与 RAG 的关系澄清:**
-
-| 架构模式 | RAG 需求 | 说明 |
-|---------|---------|-----|
-| **GenAI 应用** | ❌ 不需要 | 纯 LLM 调用,无知识库 (如内容生成、翻译) |
-| **AI Agentic (纯编排)** | ❌ 不需要 | 任务执行、工具调用,无文档检索 (如 API 自动化、流程编排) |
-| **AI Agentic + RAG** | ✅ 可选包含 | Agentic 系统需要知识库增强 (如企业知识库助手、专业顾问系统) |
-| **RAG 架构** | ✅ 必需 | 知识库问答、文档检索、企业 QA (无需复杂任务编排) |
-| **多模态 AI** | ❌ 不需要 | 图像/语音处理,可选补充 RAG (如智能文档理解) |
+**AI/ML 与 Agentic 架构（5 个）:**
+9. **GenAI 应用架构** - Bedrock + Lambda + DynamoDB
+10. **RAG 架构** - Bedrock KB + OpenSearch Serverless（知识库问答）
+11. **AI Agentic 系统架构** - Bedrock Agents + Lambda + Step Functions（任务编排）
+12. **ML 训练与推理平台** - SageMaker + S3 + ECR
+13. **多模态 AI 架构** - Bedrock + Rekognition + Textract
 
 **关键原则:**
-- ✅ 使用模式库 + WAF 评估选择服务
-- ✅ 每个服务选择必须通过 WAF 六大支柱检查
-- ✅ **AI/ML 项目额外考虑**: 模型成本、Token 限制、推理延迟、**RAG 是否真正需要**
-- ✅ **大数据项目额外考虑**: 数据分区、存储成本、查询性能
-- ❌ 禁止让 LLM "自由选择"服务(易导致过度设计)
-- ❌ 禁止跳过 WAF 评估直接输出方案
-- ❌ **禁止盲目为所有 Agentic 项目加入 RAG** (RAG 是可选的知识库增强,不是必须的)
+- ✅ RAG 是**可选的知识库增强**，不是 Agentic 必需组件
+- ✅ 只在需要文档检索/语义搜索时才用 RAG
+- ✅ 纯任务编排/API 自动化的 Agent 不需要 RAG
+- ❌ 禁止盲目为所有 Agentic 项目加入 RAG
 
----
+#### 3.13 架构模式选择决策树
 
-## 四、Design Writer - 输出文档模板
+```
+需求关键词 → 推荐架构模式
 
-### 4.1 固定章节结构(不可删减、不可合并)
+【传统应用】
+"电商"、"Web"、"API" → Web 三层架构 / Serverless API
+"本地 IDC + 云" → 混合云
+"容器"、"微服务" → 容器化应用
 
-```markdown
-# AWS 架构设计说明书
+【大数据】
+"大数据"、"分析"、"BI" → 批量数据处理 / 数据湖
+"实时"、"流数据"、"IoT" → 实时数据处理
 
-## 1. 设计背景与目标
-- 项目背景
-- 业务目标
-- 成功标准
-
-## 2. 架构设计原则
-- 适用的 AWS Well-Architected 原则
-- 项目特定的设计原则
-
-## 3. 总体架构概述
-- 架构风格(如三层架构、Serverless 等)
-- 核心组件概览
-- 架构图文字描述
-
-## 4. 网络架构设计
-- VPC 设计
-- 子网规划
-- 路由与网关
-- 混合云连接(如适用)
-
-## 5. 计算层设计
-- 计算服务选择(EC2 / Lambda / ECS / EKS)
-- 扩展策略
-- 容器 / 函数设计(如适用)
-
-## 6. 存储与数据库设计
-- 数据库选型(RDS / DynamoDB / Aurora)
-- 对象存储(S3)
-- 数据备份策略
-
-## 7. 安全与权限设计
-- IAM 角色与策略
-- 网络安全(Security Group / NACL / WAF)
-- 数据加密(传输 / 静态)
-- 合规性(等保 / SOC2 等)
-
-## 8. 高可用与灾备设计
-- 多 AZ 部署
-- RTO / RPO 目标
-- 灾备方案(Backup / Snapshot / 跨 Region)
-
-## 9. 运维与监控设计
-- 日志聚合(CloudWatch Logs / S3)
-- 监控告警(CloudWatch Alarms)
-- 自动化运维(Systems Manager / EventBridge)
-
-## 10. 成本与扩展性分析
-- 成本估算
-- 扩展性分析
-- 成本优化建议(RI / Savings Plans / Spot)
-
-## 11. 风险、假设与待确认事项
-- 技术风险
-- 假设列表
-- 待客户确认的问题
+【AI/ML】
+"聊天机器人"、"内容生成"（无文档） → GenAI 应用
+"知识库"、"文档检索"、"语义搜索" → RAG 架构
+"任务编排"、"多步骤"、"工作流"、"API 自动化" → AI Agentic（不需要 RAG）
+"任务编排" + "知识库" → AI Agentic + RAG
+"自定义模型"、"训练" → ML 训练推理
+"图像识别"、"OCR"、"语音处理" → 多模态 AI
 ```
 
-### 4.2 每章节要求
-- ✅ 明确说明**设计选择**
-- ✅ 简要解释**为什么这样设计**(Why)
-- ✅ 说明**权衡取舍**(Trade-off)
-- ✅ 若信息不足,基于**假设**并明确标注
+#### 3.14 服务选型示例
 
-### 4.3 文风要求
-- 技术说明书风格,不要营销或宣传语言
-- 使用 Markdown 格式
-- 语言:中文
-- 适合直接交付客户或进入方案评审
+**场景: 托管关系型数据库**
 
----
-
-## 五、Design Reviewer - 检查清单
-
-### 5.1 区域合规性检查
-- [ ] 若 `region = "AWS China"`,是否使用了 China 不可用的服务?
-  - 例如:AWS Batch、Amazon Chime、某些 AI 服务
-- [ ] 若 `region = "Global"`,是否考虑数据合规性(GDPR / 数据本地化)?
-
-### 5.2 架构一致性检查
-- [ ] 是否存在矛盾设计?
-  - 例如:没有 NAT Gateway 却声称可以访问公网
-  - 例如:RDS 单 AZ 部署却宣称高可用
-- [ ] 是否出现过度设计?
-  - 例如:小流量场景使用 EKS、Service Mesh
-  - 例如:无明确需求却引入 Multi-Region
-
-### 5.3 必备组件检查
-- [ ] 是否遗漏 **IAM** 角色设计?
-- [ ] 是否遗漏 **CloudWatch Logs** 日志方案?
-- [ ] 是否遗漏 **Backup** 备份策略?
-- [ ] 是否明确 **RTO / RPO**?
-- [ ] 是否考虑 **成本估算**?
-- [ ] 是否完整设计 **监控与可观测性体系**?
-
-### 5.4 运维监控与可观测性检查 (New)
-
-**核心问题:**
-- [ ] 是否定义了关键监控指标 (KPI)?
-- [ ] 是否配置了日志聚合与管理策略?
-- [ ] 是否建立了告警和分级响应机制?
-- [ ] 是否支持分布式追踪和性能诊断?
-- [ ] 是否有运维仪表盘和可视化方案?
-- [ ] 是否建立了成本监控与预警机制?
-- [ ] 是否有自动化运维脚本和 On-Call 体系?
-
-**详细检查项:**
-
-#### 日志聚合与管理
-- [ ] 是否明确日志保留期(应用日志 30-90 天、审计日志 1-3 年)?
-- [ ] 是否配置了日志脱敏(不记录敏感信息)?
-- [ ] 是否设置了日志采样率(避免日志爆炸)?
-- [ ] 是否选择了日志聚合工具(CloudWatch Logs / S3 / ELK)?
-
-#### 监控与告警
-- [ ] 是否定义了系统级监控指标(CPU、内存、磁盘、网络)?
-- [ ] 是否定义了应用级监控指标(错误率、延迟、吞吐量、并发)?
-- [ ] 是否定义了业务级监控指标(DAU、转化率、关键功能可用性)?
-- [ ] 是否定义了**告警阈值和优先级**(Critical/High/Medium/Low)?
-- [ ] 是否配置了多渠道通知(邮件、Slack、SMS、电话)?
-- [ ] 是否实施了**告警聚合**(防止告警风暴)?
-- [ ] 是否有**告警升级机制**(无响应自动升级)?
-
-#### 分布式追踪与性能诊断
-- [ ] 是否启用了 X-Ray 或类似追踪工具?
-- [ ] 是否追踪了跨服务调用链路?
-- [ ] 是否记录了关键业务事件?
-- [ ] 追踪数据保留期是否合理(7-30 天)?
-
-#### 仪表盘与可视化
-- [ ] 是否有运维监控仪表盘(系统健康、告警状态)?
-- [ ] 是否有业务仪表盘(KPI、收入、用户行为)?
-- [ ] 是否有成本仪表盘(按服务成本、预测趋势)?
-- [ ] 是否有性能仪表盘(延迟分布、错误分布)?
-- [ ] 仪表盘更新频率是否合理(实时/5分钟/小时)?
-
-#### AI/ML 特有监控 (AI 项目必检)
-- [ ] 是否监控 **Token 使用量**?
-- [ ] 是否监控 **推理延迟**(平均/P95/P99)?
-- [ ] 是否监控 **模型成功率** 和 **幻觉率**?
-- [ ] 是否记录 **Prompt 和 Completion**(用于调试)?
-- [ ] 是否进行 **数据漂移检测**(SageMaker Model Monitor)?
-
-#### 大数据特有监控 (大数据项目必检)
-- [ ] 是否监控 **ETL Job 成功率** 和 **执行时间**?
-- [ ] 是否监控 **数据延迟**(进入 vs 处理完毕)?
-- [ ] 是否监控 **数据质量**(完整性、准确性、一致性)?
-- [ ] 是否配置 **消费延迟告警**(Kinesis/Kafka)?
-- [ ] 是否监控 **存储使用率** 和 **成本趋势**?
-
-#### 自动化运维
-- [ ] 是否有自动化补丁管理策略?
-- [ ] 是否支持快速回滚(< 5 分钟)?
-- [ ] 是否有自动化故障转移机制?
-- [ ] 是否有自动化资源清理脚本?
-- [ ] 是否建立了 **On-Call 轮换体系**(24/7 支持)?
-
-### 5.5 Best Practice 检查
-- [ ] 是否使用 Multi-AZ 部署(生产环境)?
-- [ ] 是否启用加密(传输 + 静态)?
-- [ ] 是否启用 MFA(管理员账户)?
-- [ ] 是否配置告警(CPU / Memory / Disk / Error Rate)?
-- [ ] 是否建立了完整的 **运维与监控体系**(不仅仅是告警)?
-
----
-
-## 六、实施指南与优化建议
-
-### 6.1 Architecture Decisioning 执行要点
-
-#### 6.1.1 防止过度设计
-
-**常见问题:**
-- LLM 倾向于使用复杂方案(EKS、Service Mesh、Multi-Region)
-- LLM 倾向于"想当然"地添加未被要求的功能
-
-**解决方案:**
-
-1. **在 Decisioning 阶段添加约束 Prompt:**
-   > "在没有明确需求时,选择能满足需求的**最简单方案**。
-   > 例如:优先 EC2 + Auto Scaling,而非 EKS;优先单 Region,而非 Multi-Region。"
-
-2. **引入人工确认机制:**
-   - 当选择"复杂方案"时,输出决策理由并请求人工确认
-   - 例如:"检测到您选择了 EKS,是否确认需要容器编排?简单场景建议使用 EC2。"
-
-3. **复杂度评分机制:**
-   ```python
-   COMPLEXITY_SCORE = {
-       "EC2": 1,
-       "ECS Fargate": 2,
-       "EKS": 4,
-       "RDS": 1,
-       "Aurora": 2,
-       "Single Region": 1,
-       "Multi-Region": 4
-   }
-
-   # 若总分 > 10,触发人工确认
-   if total_complexity_score > 10:
-       request_confirmation("架构复杂度较高,是否确认?")
-   ```
-
-#### 6.1.2 WAF 检查强制执行
-
-**关键原则: WAF 检查是 MANDATORY,不可跳过。**
-
-**执行流程:**
-
-```python
-def architecture_decisioning(requirements):
-    # 1. 服务选型
-    services = service_selection(requirements)
-
-    # 2. WAF 检查(强制)
-    waf_result = perform_waf_assessment(services)
-
-    # 3. 检查是否通过
-    if waf_result.has_critical_issues():
-        raise ArchitectureError("WAF 检查未通过,存在关键问题")
-
-    # 4. 输出设计蓝图
-    return generate_blueprint(services, waf_result)
-```
-
-**WAF 检查清单自动化:**
-
-| 支柱 | 自动检查项 | 不通过的处理 |
-|-----|----------|------------|
-| 卓越运营 | CloudWatch Logs 是否配置? | 警告 + 建议 |
-| 安全性 | IAM/KMS/TLS 是否启用? | **阻断**,必须修复 |
-| 可靠性 | Multi-AZ 是否部署?(生产) | **阻断**,必须修复 |
-| 性能效率 | 实例类型是否合理? | 警告 + 建议 |
-| 成本优化 | Auto Scaling 是否配置? | 警告 + 建议 |
-| 可持续性 | Graviton 是否考虑? | 提示(可选) |
-
-**阻断级别:**
-- 🔴 **Critical(阻断)**: 安全性、可靠性问题,必须修复才能继续
-- 🟡 **Warning(警告)**: 非关键问题,记录到文档的"改进建议"
-- 🟢 **Info(提示)**: 优化建议,不影响输出
-
-### 6.2 强制输出 Why 和 Trade-off
-在 Design Writer 的 Prompt 中强制要求:
-- 每个技术选型必须写明**选择理由(Why)**
-- 每个重要决策必须说明**权衡(Trade-off)**
-
-**示例:**
-```markdown
-### 5.1 计算服务选择:EC2 Auto Scaling
-
-**选择理由(Why):**
-- 应用为传统 Web 框架(Spring Boot),迁移成本低
-- 需要保持对运行时环境的完全控制
-- 团队熟悉 EC2 运维
-
-**权衡(Trade-off):**
-- ✅ 优势:灵活性高,可深度定制
-- ❌ 劣势:需要管理操作系统和补丁
-- 💡 替代方案:若希望减少运维负担,可考虑 ECS Fargate
-```
-
-### 6.3 China Region 特判逻辑
-**硬编码规则库:**
-```json
-{
-  "china_unavailable_services": [
-    "AWS Batch",
-    "Amazon Chime",
-    "Amazon Comprehend",
-    "Amazon Forecast"
-  ],
-  "china_service_mapping": {
-    "Route 53": "需使用 ICP 备案域名",
-    "CloudFront": "需使用中国境内加速服务(如 CloudFront China)"
-  }
-}
-```
-
-在 Reviewer 阶段强制检查,若违反则拒绝输出。
-
-### 6.4 Architecture Diagram Generation 执行要点
-
-#### 6.4.1 MCP Server 集成工作流
-
-**目标:** 当用户未提供架构图时,自动调用 MCP Server 绘制架构图
-
-**集成步骤:**
-
-1. **检测架构图的有无(Material Parser 阶段)**
-   ```python
-   def detect_diagram_presence(user_input):
-       """检测用户是否上传了架构图"""
-       if user_input.contains("image") or user_input.contains("diagram"):
-           return {
-               "has_diagram": True,
-               "diagram_type": detect_image_type(user_input),  # 检查是 PNG/PDF/JPEG 等
-               "diagram_file": extract_file_path(user_input)
-           }
-       else:
-           return {
-               "has_diagram": False,
-               "diagram_type": None,
-               "diagram_file": None
-           }
-   ```
-
-2. **Case 1: 用户提供了架构图**
-   - ✅ 使用 Vision API 或 OCR 识别架构图内容
-   - ✅ 提取 AWS 服务和连接关系
-   - ✅ 生成文字描述
-   - ✅ 验证与需求的匹配度
-
-3. **Case 2: 用户未提供架构图**
-   - ① 基于"Architecture Decisioning"阶段的结果构建**架构蓝图**(服务列表 + 连接关系)
-   - ② **调用 MCP Server**: `awslabs-aws-diagram-mcp-server`
-   - ③ 传入架构蓝图(JSON 格式)
-   - ④ 返回生成的架构图文件(PNG/SVG)
-   - ⑤ 生成架构图的文字描述
-   - ⑥ 整合到设计文档中
-
-**调用 MCP Server 的 Prompt 示例:**
-```markdown
-你需要使用 AWS Diagram MCP Server 生成一份 AWS 架构图。
-
-【输入的架构蓝图】
-```json
-{
-  "architecture_pattern": "Web 三层架构",
-  "services": [
-    {
-      "name": "ALB",
-      "type": "Application Load Balancer",
-      "region": "us-east-1",
-      "multi_az": true
-    },
-    {
-      "name": "EC2-ASG",
-      "type": "EC2 Auto Scaling Group",
-      "region": "us-east-1",
-      "multi_az": true,
-      "instance_type": "t3.medium"
-    },
-    {
-      "name": "RDS-MySQL",
-      "type": "RDS for MySQL",
-      "region": "us-east-1",
-      "multi_az": true,
-      "storage": "200GB"
-    },
-    {
-      "name": "S3",
-      "type": "S3 Bucket",
-      "region": "us-east-1"
-    }
-  ],
-  "connections": [
-    {
-      "from": "ALB",
-      "to": "EC2-ASG",
-      "label": "HTTP/HTTPS",
-      "protocol": "TCP 80/443"
-    },
-    {
-      "from": "EC2-ASG",
-      "to": "RDS-MySQL",
-      "label": "SQL Query",
-      "protocol": "TCP 3306"
-    },
-    {
-      "from": "EC2-ASG",
-      "to": "S3",
-      "label": "Object Store",
-      "protocol": "HTTPS"
-    }
-  ],
-  "network_config": {
-    "vpc": {
-      "cidr": "10.0.0.0/16",
-      "multi_az": true,
-      "subnets": [
-        {"name": "Public-1a", "tier": "public", "cidr": "10.0.1.0/24"},
-        {"name": "Public-1b", "tier": "public", "cidr": "10.0.2.0/24"},
-        {"name": "Private-1a", "tier": "private", "cidr": "10.0.11.0/24"},
-        {"name": "Private-1b", "tier": "private", "cidr": "10.0.12.0/24"},
-        {"name": "Data-1a", "tier": "data", "cidr": "10.0.21.0/24"},
-        {"name": "Data-1b", "tier": "data", "cidr": "10.0.22.0/24"}
-      ]
-    }
-  }
-}
-```
-
-【你的任务】
-1. 调用 awslabs-aws-diagram-mcp-server 生成架构图
-2. 传入上述架构蓝图 JSON
-3. 生成 PNG 或 SVG 格式的架构图
-4. 返回生成的架构图文件路径
-5. 生成架构图的文字描述(用于设计文档)
-```
-
-#### 6.4.2 架构蓝图构建规则
-
-**在 Architecture Decisioning 阶段,需要构建以下结构:**
-
-```python
-def build_architecture_blueprint(decisions):
-    """基于架构决策构建架构蓝图(用于图生成)"""
-
-    blueprint = {
-        "architecture_pattern": decisions.pattern,  # 如 "Web 三层架构"
-        "services": [],
-        "connections": [],
-        "network_config": {}
-    }
-
-    # 1. 添加计算层服务
-    if decisions.compute == "EC2":
-        blueprint.services.append({
-            "name": "EC2-ASG",
-            "type": "EC2 Auto Scaling Group",
-            "multi_az": decisions.availability > 99.5,
-            "instance_type": decisions.instance_type
-        })
-
-    # 2. 添加数据库服务
-    if decisions.database == "RDS":
-        blueprint.services.append({
-            "name": "RDS-Primary",
-            "type": "RDS for " + decisions.db_engine,
-            "multi_az": decisions.reliability.rds_multi_az,
-            "storage": decisions.storage_size
-        })
-
-    # 3. 添加连接关系
-    if "EC2-ASG" in [s["name"] for s in blueprint.services]:
-        if "RDS-Primary" in [s["name"] for s in blueprint.services]:
-            blueprint.connections.append({
-                "from": "EC2-ASG",
-                "to": "RDS-Primary",
-                "label": "SQL Query",
-                "protocol": f"TCP {decisions.db_port}"
-            })
-
-    # 4. 添加负载均衡
-    if decisions.availability > 99.5:
-        blueprint.services.insert(0, {
-            "name": "ALB",
-            "type": "Application Load Balancer",
-            "multi_az": True
-        })
-        blueprint.connections.insert(0, {
-            "from": "Internet",
-            "to": "ALB",
-            "label": "HTTP/HTTPS"
-        })
-
-    # 5. 构建网络配置
-    blueprint.network_config = {
-        "vpc": {
-            "cidr": "10.0.0.0/16",
-            "multi_az": decisions.availability > 99.5,
-            "subnets": generate_subnets(decisions)
-        }
-    }
-
-    return blueprint
-```
-
-**架构蓝图应包含的关键要素:**
-- ✅ 所有确定的 AWS 服务
-- ✅ 服务间的数据流和依赖关系
-- ✅ Multi-AZ 配置(若适用)
-- ✅ 网络配置(VPC、子网、路由)
-- ✅ 安全组和网络 ACL 规则(概览)
-- ✅ 备份和灾备配置(概览)
-
-#### 6.4.3 MCP Server 响应处理
-
-**预期返回结果:**
-```json
-{
-  "status": "success",
-  "diagram_file": "/tmp/aws_architecture_diagram.png",
-  "diagram_format": "PNG",
-  "services_detected": [
-    "Application Load Balancer",
-    "EC2 Auto Scaling Group",
-    "RDS for MySQL",
-    "S3 Bucket"
-  ],
-  "connections_detected": [
-    {"from": "ALB", "to": "EC2", "type": "forward"},
-    {"from": "EC2", "to": "RDS", "type": "query"}
-  ]
-}
-```
-
-**错误处理:**
-- 若 MCP Server 不可用: 回退到文字描述架构,在 Design Writer 阶段补充
-- 若生成失败: 记录日志,继续流程,但在 Design Reviewer 阶段标注"架构图缺失"
-
-#### 6.4.4 架构图与文档的集成
-
-**在 Design Writer 阶段:**
-1. 在"总体架构概述"章节插入架构图(PNG/SVG)
-2. 添加架构图的文字描述
-3. 标注关键组件和数据流
-
-**示例插入:**
-```markdown
-## 3. 总体架构概述
-
-### 3.1 架构风格
-Web 三层架构 (Multi-AZ 部署)
-
-### 3.2 核心组件概览
-...
-
-### 3.3 架构图
-![AWS Architecture Diagram](./diagrams/architecture.png)
-
-### 3.4 架构图文字描述
-...
-```
-
-#### 6.4.5 Design Reviewer 阶段的架构图检查
-
-**新增检查项:**
-- [ ] 架构图是否存在?
-- [ ] 架构图中的服务是否与设计文档一致?
-- [ ] 架构图是否体现了 Multi-AZ/Multi-Region 部署?
-- [ ] 架构图中的连接是否准确?
-- [ ] 关键组件(备份、灾备、监控)是否在架构图中标注?
-
-**检查失败处理:**
-- 若架构图与文档不一致: 标注为 Critical Issue,要求修正
-- 若架构图缺失关键组件: 标注为 Warning,建议补充
-
----
-
-## 七、推荐 Prompt 模板
-
-### 7.1 Material Parser Prompt
-
-```markdown
-你是一名 AWS 解决方案架构师的助手,负责从零散、非结构化的客户材料中提取关键信息。
-
-【输入】
-用户提供的材料可能是:
-- 会议记录(散乱的讨论要点)
-- 简单需求列表(箭头式要点)
-- 代码片段(现有系统实现)
-- Word/Excel 文档
-- 混合形式的文本
-
-【你的任务】
-1. **信息清洗与提取**
-   从输入材料中提取以下 5 大关键要素:
-   - 功能需求: 系统需要实现的业务功能
-   - 非功能需求: 可用性、性能、延迟、扩展性、RTO/RPO
-   - 合规性要求: 等保、GDPR、数据本地化等
-   - 预算限制: 月度/年度预算上限
-   - 预估流量: DAU、QPS、数据量、峰值倍数
-
-2. **识别缺失信息**
-   对于以下 **P0 关键信息**,如果缺失则必须标注:
-   - RTO/RPO(恢复时间/恢复点目标)
-   - 可用性要求(如 99.9%)
-   - 预估流量/QPS
-   - AWS 区域(Global / China)
-
-3. **生成追问列表**
-   对于缺失的 P0 信息,生成具体的追问问题:
-   - 提供选项或参考值(如: "RTO < 4h, RPO < 1h")
-   - 一次最多 3-5 个问题
-   - 使用易于理解的语言
-
-4. **输出结构化 JSON**
-   按照以下格式输出:
-   ```json
-   {
-     "business_goals": [...],
-     "functional_requirements": [...],
-     "non_functional_requirements": {...},
-     "traffic_estimation": {...},
-     "constraints": {...},
-     "assumptions": [...],
-     "open_questions": [...],
-     "generated_questions_for_user": [...]
-   }
-   ```
-
-【关键原则】
-- ❌ 不要"脑补"未明确的强约束
-- ✅ 优先提取明确信息,不确定的标注为"待确认"
-- ✅ 对于代码片段,推断技术栈但不假设架构模式
-- ✅ 对于会议记录,区分"已决策"和"待讨论"
-- ✅ 生成的追问问题必须具体、可操作
-
-【示例输出】
-见文档第 3.2.3 节完整示例。
-```
-
----
-
-### 7.2 Architecture Decisioning Prompt
-
-```markdown
-你是一名资深 AWS 解决方案架构师,负责基于结构化需求数据进行架构决策。
-
-【输入】
-- Material Parser 输出的结构化需求 JSON
-- 包含: 业务目标、功能/非功能需求、流量估算、约束条件
-
-【你的任务】
-
-#### 任务 1: 服务选型决策
-
-对于每个需求维度(计算、存储、数据库、网络、缓存等),执行以下步骤:
-
-1. **生成候选服务列表**
-   - 基于需求类型,列出所有可能的 AWS 服务
-   - 例如: "托管数据库" → [RDS, Aurora, DynamoDB]
-
-2. **基于约束条件筛选**
-   - Region 约束(China / Global)
-   - 合规要求
-   - 预算限制
-   - 技术栈兼容性
-
-3. **候选服务对比评估**
-   - 列出每个候选服务的 优势(Pros) 和 劣势(Cons)
-   - 说明适用场景
-   - 估算成本差异
-
-4. **输出最终推荐**
-   - 选择 1 个主推方案
-   - 提供 1-2 个替代方案
-   - 写明决策理由(Why)
-   - 说明权衡(Trade-off)
-
-**示例格式:**
 ```json
 {
   "decision_item": "数据库选型",
@@ -2174,606 +496,350 @@ Web 三层架构 (Multi-AZ 部署)
     }
   ],
   "recommendation": "Amazon RDS for MySQL",
-  "reason": "基于 10 万 DAU 的中等规模,RDS 性价比更优,满足 99.9% 可用性要求",
-  "alternative": "若未来流量增长 10 倍,建议迁移至 Aurora"
+  "reason": "基于 10 万 DAU 的中等规模，RDS 性价比更优，满足 99.9% 可用性要求",
+  "alternative": "若未来流量增长 10 倍，建议迁移至 Aurora"
 }
 ```
 
-#### 任务 2: AWS Well-Architected Framework 检查
+#### 3.15 防止过度设计
 
-**CRITICAL: 你必须对每个架构设计逐一进行 WAF 六大支柱检查。**
-
-对于每个支柱,回答以下问题:
-
-##### 1️⃣ 卓越运营 (Operational Excellence)
-- [ ] 是否定义了运维流程和标准?
-- [ ] 是否使用 IaC(CloudFormation/Terraform)?
-- [ ] 是否配置了日志聚合(CloudWatch Logs)?
-- [ ] 是否配置了自动化运维(Systems Manager)?
-
-**输出示例:**
-```json
-{
-  "operational_excellence": {
-    "score": "✅ 符合",
-    "evidence": [
-      "使用 CloudWatch Logs 聚合日志",
-      "配置 Systems Manager 自动补丁",
-      "推荐使用 Terraform 进行 IaC"
-    ],
-    "improvements": [
-      "建议建立变更管理流程"
-    ]
-  }
+**复杂度评分机制:**
+```python
+COMPLEXITY_SCORE = {
+    "EC2": 1,
+    "ECS Fargate": 2,
+    "EKS": 4,
+    "RDS": 1,
+    "Aurora": 2,
+    "Single Region": 1,
+    "Multi-Region": 4
 }
+
+# 若总分 > 10，触发人工确认
+if total_complexity_score > 10:
+    request_confirmation("架构复杂度较高，是否确认？")
 ```
 
-##### 2️⃣ 安全性 (Security)
-- [ ] 是否遵循最小权限原则(IAM)?
-- [ ] 是否启用静态数据加密(KMS)?
-- [ ] 是否启用传输加密(TLS)?
-- [ ] 是否配置网络隔离(VPC/SG)?
-- [ ] 是否启用审计日志(CloudTrail)?
-
-##### 3️⃣ 可靠性 (Reliability)
-- [ ] 是否实现 Multi-AZ 部署?
-- [ ] 是否配置自动故障转移?
-- [ ] 是否定义了 RTO/RPO?
-- [ ] 是否配置了备份策略?
-
-##### 4️⃣ 性能效率 (Performance Efficiency)
-- [ ] 实例类型是否适配工作负载?
-- [ ] 是否使用了缓存(ElastiCache/CloudFront)?
-- [ ] 是否优化了数据库查询?
-
-##### 5️⃣ 成本优化 (Cost Optimization)
-- [ ] 是否使用 Auto Scaling 避免浪费?
-- [ ] 是否考虑 RI / Savings Plans?
-- [ ] 是否配置 S3 生命周期策略?
-
-##### 6️⃣ 可持续性 (Sustainability)
-- [ ] 是否选择能效实例(Graviton)?
-- [ ] 是否优化资源利用率?
-
-**WAF 评估输出格式:**
-```json
-{
-  "waf_assessment": {
-    "operational_excellence": {"score": "✅", "evidence": [...], "improvements": [...]},
-    "security": {"score": "✅", "evidence": [...], "improvements": [...]},
-    "reliability": {"score": "⚠️", "evidence": [...], "improvements": ["需明确 RTO/RPO"]},
-    "performance": {"score": "✅", "evidence": [...], "improvements": [...]},
-    "cost": {"score": "✅", "evidence": [...], "improvements": [...]},
-    "sustainability": {"score": "⚠️", "evidence": [...], "improvements": ["建议使用 Graviton"]}
-  }
-}
-```
-
-#### 任务 3: 架构模式匹配
-
-从预定义模式库中选择最匹配的架构模式:
-- Web 三层架构
-- Serverless API
-- 数据分析平台
-- SaaS 多租户
-- 混合云 / 专线
-
-输出选择的模式及理由。
-
-#### 任务 4: Region / China 特判
-
-- 若 region = "AWS China",检查是否使用了不可用服务
-- 输出服务可用性检查结果
-
-#### 任务 5: AI/ML 与大数据项目的特殊处理
-
-**如果项目类型为 AI/ML:**
-
-1. **额外 WAF 检查**
-   - AI Cost Optimization: Token 成本、推理成本、向量数据库成本
-   - AI Performance: 推理延迟、模型选择、批处理优化
-   - AI Security: 数据隐私、Prompt Injection 防护、访问控制
-   - AI Reliability: 降级策略、幻觉检测、版本管理
-   - MLOps: 监控、持续优化
-
-2. **关键决策**
-   - 模型选择(Bedrock vs SageMaker,Claude vs Llama)
-   - 向量数据库选择(OpenSearch vs Kendra vs pgvector)
-   - 部署方式(Real-time vs Serverless vs Batch)
-   - 成本控制策略(Token 限制、缓存、模型降级)
-
-3. **输出额外字段**
-   ```json
-   {
-     "ai_specific": {
-       "model_choice": "Claude 3.5 Sonnet",
-       "model_reason": "推理能力强,支持多模态,适合复杂任务",
-       "cost_estimate": "$0.003/1K input tokens + $0.015/1K output tokens",
-       "vector_db": "OpenSearch Serverless",
-       "embedding_model": "Titan Embeddings v2"
-     }
-   }
-   ```
-
-**如果项目类型为大数据:**
-
-1. **额外 WAF 检查**
-   - Big Data Cost: 存储成本、计算成本、数据传输成本
-   - Big Data Performance: 查询性能、数据处理性能、并发控制
-   - Big Data Reliability: 数据一致性、容错机制、数据质量
-   - Big Data Security: 数据加密、访问控制、数据脱敏
-   - Data Governance: 监控、数据治理、自动化
-
-2. **关键决策**
-   - 离线 vs 实时(Athena vs Kinesis)
-   - ETL 工具(Glue vs EMR)
-   - 数据仓库(Redshift vs Redshift Serverless)
-   - 数据格式(Parquet vs ORC)
-   - 分区策略(日期/地区/业务维度)
-
-3. **输出额外字段**
-   ```json
-   {
-     "bigdata_specific": {
-       "processing_mode": "批处理 + 实时流",
-       "etl_tool": "AWS Glue",
-       "data_warehouse": "Redshift Serverless",
-       "storage_format": "Parquet (列式存储)",
-       "partition_strategy": "按日期分区 (year/month/day)",
-       "estimated_data_volume": "1 TB/day,年增长 50%"
-     }
-   }
-   ```
-
-【输出格式】
-```json
-{
-  "project_type": "AI/ML" | "Big Data" | "Web Application" | "...",
-  "architecture_decisions": {
-    "compute": {...},
-    "database": {...},
-    "storage": {...},
-    "network": {...},
-    "cache": {...}
-  },
-  "waf_assessment": {...},
-  "architecture_pattern": "RAG 架构" | "实时数据处理平台" | "...",
-  "pattern_reason": "企业知识库问答,需要文档检索和生成式 AI",
-  "region_compliance": {
-    "region": "AWS China",
-    "unavailable_services": [],
-    "warnings": []
-  },
-  "ai_specific": {...},  // 仅 AI/ML 项目
-  "bigdata_specific": {...}  // 仅大数据项目
-}
-```
-
-【关键原则】
-- ✅ 每个服务选择必须通过 WAF 检查
-- ✅ **AI/ML 项目必须通过 AI 特有检查点**
-- ✅ **大数据项目必须通过大数据特有检查点**
-- ✅ 必须提供决策理由和替代方案
-- ✅ 优先选择最简单可满足需求的方案
-- ❌ 禁止跳过 WAF 评估
-- ❌ 禁止过度设计(无需求不上 EKS/Multi-Region)
-- ❌ 禁止"脑补"未明确的需求
-- ❌ **AI 项目禁止忽略成本控制(Token 限制、模型选择)**
-- ❌ **大数据项目禁止忽略数据分区和存储优化**
-```
+**原则:**
+- 优先 EC2 + Auto Scaling，而非 EKS
+- 优先单 Region，而非 Multi-Region
+- 选择能满足需求的**最简单方案**
 
 ---
 
-### 7.3 Design Writer Prompt
+### 步骤 4: Design Writer（文档生成）
+
+#### 3.16 固定章节结构（11 章，不可删减/合并）
 
 ```markdown
-你是一名资深 AWS 解决方案架构师(SA),需要基于已解析的结构化需求数据,
-编写一份《AWS 架构设计说明书》。
+# AWS 架构设计说明书
 
-【输入】
-- 业务目标、非功能需求、约束条件、假设、未确认事项(已结构化为 JSON)
-- 已完成的架构设计蓝图(服务选型已确定)
+## 1. 设计背景与目标
+- 项目背景
+- 业务目标
+- 成功标准
 
-【编写要求】
-1. **严格按照以下章节顺序输出,不得合并或跳过:**
-   1) 设计背景与目标
-   2) 架构设计原则
-   3) 总体架构概述
-   4) 网络架构设计
-   5) 计算层设计
-   6) 存储与数据库设计
-   7) 安全与权限设计
-   8) 高可用与灾备设计
-   9) 运维与监控设计
-   10) 成本与扩展性分析
-   11) 风险、假设与待确认事项
+## 2. 架构设计原则
+- 适用的 AWS Well-Architected 原则
+- 项目特定的设计原则
 
-2. **每一章节必须包含:**
-   - 设计选择的具体内容
-   - 选择理由(Why)
-   - 权衡说明(Trade-off)
-   - 若信息不足,基于输入中的假设并**明确标注**
+## 3. 总体架构概述
+- 架构风格（如三层架构、Serverless 等）
+- 核心组件概览
+- 架构图文字描述
 
-3. **禁止事项:**
-   - ❌ 引入输入中未出现的强约束
-   - ❌ 使用 AWS China 不可用的服务(若 region = China)
-   - ❌ 过度设计(无需求不上 EKS / Multi-Region)
+## 4. 网络架构设计
+- VPC 设计
+- 子网规划
+- 路由与网关
+- 混合云连接（如适用）
 
-4. **文风要求:**
-   - 技术说明书风格,避免营销语言
-   - 适合直接交付客户或进入方案评审
-   - 使用 Markdown 格式
-   - 语言:中文
+## 5. 计算层设计
+- 计算服务选择（EC2 / Lambda / ECS / EKS）
+- 扩展策略
+- 容器 / 函数设计（如适用）
 
-【输出格式】
-- Markdown 文档
-- 章节编号清晰(使用 ##、###)
-- 代码块使用 ``` 标注
+## 6. 存储与数据库设计
+- 数据库选型（RDS / DynamoDB / Aurora）
+- 对象存储（S3）
+- 数据备份策略
+
+## 7. 安全与权限设计
+- IAM 角色与策略
+- 网络安全（Security Group / NACL / WAF）
+- 数据加密（传输 / 静态）
+- 合规性（等保 / SOC2 等）
+
+## 8. 高可用与灾备设计
+- 多 AZ 部署
+- RTO / RPO 目标
+- 灾备方案（Backup / Snapshot / 跨 Region）
+
+## 9. 运维与监控设计
+- 日志聚合（CloudWatch Logs / S3）
+- 监控告警（CloudWatch Alarms）
+- 自动化运维（Systems Manager / EventBridge）
+
+## 10. 成本与扩展性分析
+- 成本估算
+- 扩展性分析
+- 成本优化建议（RI / Savings Plans / Spot）
+
+## 11. 风险、假设与待确认事项
+- 技术风险
+- 假设列表
+- 待客户确认的问题
 ```
+
+#### 3.17 写作要求
+
+**每章节必须包含:**
+- ✅ 设计选择的具体内容
+- ✅ 选择理由（Why）
+- ✅ 权衡说明（Trade-off）
+- ✅ 若信息不足，基于假设并**明确标注**
+
+**写作标准:**
+- 📝 参考 `references/WRITING_STANDARDS.md`
+- 语言专业、丰满、精准
+- 每个技术决策包含 4 要素：决策内容、理由、权衡、指标
+- 避免过度啰嗦，直击要点
+- 使用准确的 AWS 术语
+
+**文风要求:**
+- 技术说明书风格，避免营销语言
+- 适合直接交付客户或进入方案评审
+- 使用 Markdown 格式
+- 语言：中文
 
 ---
 
-## 八、验收标准
+### 步骤 5: Design Reviewer（质量审查）
 
-### 8.1 文档完整性
-- ✅ 包含全部 11 个章节,结构完整
+#### 3.18 检查清单
+
+**5.1 区域合规性检查**
+- [ ] 若 `region = "AWS China"`，是否使用了 China 不可用的服务？
+- [ ] 若 `region = "Global"`，是否考虑数据合规性（GDPR / 数据本地化）？
+
+**5.2 架构一致性检查**
+- [ ] 是否存在矛盾设计？（如：没有 NAT Gateway 却声称可访问公网）
+- [ ] 是否出现过度设计？（如：小流量场景使用 EKS）
+
+**5.3 必备组件检查**
+- [ ] 是否遗漏 **IAM** 角色设计？
+- [ ] 是否遗漏 **CloudWatch Logs** 日志方案？
+- [ ] 是否遗漏 **Backup** 备份策略？
+- [ ] 是否明确 **RTO / RPO**？
+- [ ] 是否考虑 **成本估算**？
+- [ ] 是否完整设计 **监控与可观测性体系**？
+
+**5.4 运维监控与可观测性检查**
+
+**日志聚合与管理:**
+- [ ] 是否明确日志保留期（应用日志 30-90 天、审计日志 1-3 年）？
+- [ ] 是否配置了日志脱敏（不记录敏感信息）？
+- [ ] 是否设置了日志采样率（避免日志爆炸）？
+
+**监控与告警:**
+- [ ] 是否定义了系统级监控指标（CPU、内存、磁盘、网络）？
+- [ ] 是否定义了应用级监控指标（错误率、延迟、吞吐量）？
+- [ ] 是否定义了业务级监控指标（DAU、转化率、关键功能可用性）？
+- [ ] 是否定义了**告警阈值和优先级**（Critical/High/Medium/Low）？
+- [ ] 是否配置了多渠道通知（邮件、Slack、SMS）？
+- [ ] 是否实施了**告警聚合**（防止告警风暴）？
+- [ ] 是否有**告警升级机制**（无响应自动升级）？
+
+**分布式追踪与性能诊断:**
+- [ ] 是否启用了 X-Ray 或类似追踪工具？
+- [ ] 是否追踪了跨服务调用链路？
+
+**仪表盘与可视化:**
+- [ ] 是否有运维监控仪表盘（系统健康、告警状态）？
+- [ ] 是否有业务仪表盘（KPI、收入、用户行为）？
+- [ ] 是否有成本仪表盘（按服务成本、预测趋势）？
+
+**AI/ML 特有监控（AI 项目必检）:**
+- [ ] 是否监控 **Token 使用量**？
+- [ ] 是否监控 **推理延迟**（平均/P95/P99）？
+- [ ] 是否监控 **模型成功率** 和 **幻觉率**？
+- [ ] 是否记录 **Prompt 和 Completion**（用于调试）？
+- [ ] 是否进行 **数据漂移检测**（SageMaker Model Monitor）？
+
+**大数据特有监控（大数据项目必检）:**
+- [ ] 是否监控 **ETL Job 成功率** 和 **执行时间**？
+- [ ] 是否监控 **数据延迟**（进入 vs 处理完毕）？
+- [ ] 是否监控 **数据质量**（完整性、准确性、一致性）？
+- [ ] 是否配置 **消费延迟告警**（Kinesis/Kafka）？
+- [ ] 是否监控 **存储使用率** 和 **成本趋势**？
+
+**自动化运维:**
+- [ ] 是否有自动化补丁管理策略？
+- [ ] 是否支持快速回滚（< 5 分钟）？
+- [ ] 是否有自动化故障转移机制？
+- [ ] 是否建立了 **On-Call 轮换体系**（24/7 支持）？
+
+**5.5 Best Practice 检查**
+- [ ] 是否使用 Multi-AZ 部署（生产环境）？
+- [ ] 是否启用加密（传输 + 静态）？
+- [ ] 是否启用 MFA（管理员账户）？
+- [ ] 是否配置告警（CPU / Memory / Disk / Error Rate）？
+
+**5.6 架构图检查**
+- [ ] 架构图是否存在？
+- [ ] 架构图中的服务是否与设计文档一致？
+- [ ] 架构图是否体现了 Multi-AZ/Multi-Region 部署？
+- [ ] 关键组件（备份、灾备、监控）是否在架构图中标注？
+
+---
+
+## 四、验收标准
+
+### 4.1 文档完整性
+- ✅ 包含全部 11 个章节，结构完整
 - ✅ 每个技术选择都有 Why 和 Trade-off 说明
 - ✅ 明确标注所有假设和待确认事项
-- ✅ 文风专业,适合直接交付
+- ✅ 文风专业，适合直接交付
 
-### 8.2 架构决策质量
+### 4.2 架构决策质量
 - ✅ **所有服务选择都经过 WAF 六大支柱评估**
 - ✅ 每个服务选型都有候选对比和决策理由
 - ✅ 提供了替代方案和升级路径
-- ✅ 没有出现过度设计(复杂度评分合理)
+- ✅ 没有出现过度设计（复杂度评分合理）
 
-### 8.3 技术合规性
-- ✅ 通过 Reviewer 检查(无架构矛盾、无遗漏组件)
+### 4.3 技术合规性
+- ✅ 通过 Reviewer 检查（无架构矛盾、无遗漏组件）
 - ✅ 符合 AWS China / Global 区域限制
-- ✅ 满足合规性要求(等保、GDPR 等)
-- ✅ 安全性和可靠性检查通过(无 Critical 级别问题)
+- ✅ 满足合规性要求（等保、GDPR 等）
+- ✅ 安全性和可靠性检查通过（无 Critical 级别问题）
 
-### 8.4 可追溯性
+### 4.4 可追溯性
 - ✅ 记录了 Material Parser 的交互历史
 - ✅ 记录了 Architecture Decisioning 的决策过程
 - ✅ WAF 评估结果可追溯
 
 ---
 
-## 九、后续扩展方向
+## 五、参考文档结构
 
-### 9.1 与其他 Skill 的集成
-- **架构图生成 Skill**(已实现):
-  - ✅ 通过 awslabs-aws-diagram-mcp-server 自动生成架构图
-  - ✅ 支持用户上传的架构图识别和验证
-  - ✅ 自动生成架构图的文字描述
-- **IaC 代码生成 Skill**: 将设计说明书转为 Terraform / CloudFormation 代码
-- **成本计算 Skill**: 基于服务选型自动调用 AWS Pricing API 生成详细成本报告
+### 5.1 references/ 目录
 
-### 9.2 架构图生成能力
-**已实现:**
-- ✅ 用户提供架构图时的检测和识别(Vision/OCR)
-- ✅ 架构蓝图自动构建(基于架构决策)
-- ✅ MCP Server 集成(awslabs-aws-diagram-mcp-server)
-- ✅ 架构图一致性验证
-- ✅ 文字描述自动生成
+```
+references/
+├── README.md                              - 参考文档索引
+├── architecture_patterns.md               - 架构模式库
+├── waf_checklist.md                       - WAF 检查清单
+├── agentic_ai_practice_requirements.md    - AI Agentic 实践要求
+├── WRITING_STANDARDS.md                   - 写作标准（步骤 4 必读）
+├── WHEN_TO_USE_WRITING_STANDARDS.md       - 写作标准使用指南
+├── WRITING_STANDARDS_USAGE_SUMMARY.md     - 写作标准使用总结
+└── WRITING_STANDARDS_INTEGRATION_SUMMARY.md - 写作标准整合总结
+```
 
-**未来增强:**
-- 🔄 支持多个架构模式的专用绘制优化
-- 🔄 实时架构图修改和验证
-- 🔄 架构图版本管理(历史对比)
-- 🔄 支持导出为 Draw.io/Lucidchart 格式
+### 5.2 使用时机
 
-### 9.3 案例学习文件支持
-**已实现:**
-- ✅ 案例学习文件的自动检测(文件名和内容)
-- ✅ 结构化信息提取(背景、痛点、方案、指标、收益、经验)
-- ✅ 与新项目的相关性匹配(多维度计分)
-- ✅ 可复用服务和经验的提取
-- ✅ 参考加速决策(基于验证过的案例)
-
-**未来增强:**
-- 🔄 案例库管理和分类(按行业、架构模式、规模)
-- 🔄 多案例对比和综合参考
-- 🔄 案例学习效果跟踪(实际 vs 预期)
-- 🔄 案例更新和版本管理
-- 🔄 案例 ROI 计算和成本基线预测
-
-### 9.4 知识库增强
-- 集成 AWS Well-Architected Framework Lens 库
-- 集成行业 Compliance 要求库(金融、医疗、政务)
-- 集成 AWS 服务配额(Service Quotas)检查
-
-### 9.5 交互式优化
-- 支持多轮对话,逐步细化设计
-- 支持"设计对比"功能(方案 A vs 方案 B)
-- 支持架构图的交互式编辑和验证
+| 参考文档 | 使用频率 | 主要用途 |
+|---------|---------|---------|
+| **WRITING_STANDARDS.md** | 每个项目 | 步骤 4 写作质量控制 ⭐⭐⭐ |
+| **waf_checklist.md** | 每个项目 | 步骤 3/5 架构质量检查 ⭐⭐⭐ |
+| **architecture_patterns.md** | 每个项目 | 步骤 3 架构模式选择 ⭐⭐⭐ |
+| **agentic_ai_practice_requirements.md** | AI/ML 项目 | 步骤 3/4/5 AI 项目特殊要求 ⭐⭐ |
 
 ---
 
-## 附录:常见架构模式参考
+## 六、关键原则总结
 
-### A.1 传统应用架构
+### 6.1 核心原则
+1. **结构化优先** - 所有步骤基于结构化数据，不依赖自然语言传递
+2. **模式化设计** - 使用预定义架构模式，避免 LLM 自由发挥
+3. **强制检查** - WAF 检查是 MANDATORY，不可跳过
+4. **防止过度设计** - 优先最简方案（EC2 优于 EKS，单 Region 优于 Multi-Region）
+5. **架构图驱动** - 所有设计都包含架构图（用户提供或自动生成）
+6. **写作标准** - 严格遵循写作标准，确保文档专业、丰满、精准
 
-| 模式名称 | 适用场景 | 核心服务 | 典型规模 |
-|---------|---------|---------|---------|
-| Web 三层架构 | 传统 Web 应用 | ALB + EC2 ASG + RDS Multi-AZ | 10 万 - 100 万 DAU |
-| Serverless API | 轻量级 API | API Gateway + Lambda + DynamoDB | 不定期流量 |
-| SaaS 多租户 | SaaS 应用 | 租户隔离 + 资源池 | 多租户管理 |
-| 混合云 | 本地 IDC + 云 | Direct Connect + VPN + Transit Gateway | 混合部署 |
-| 容器化应用 | 微服务架构 | ECS Fargate / EKS | 复杂微服务 |
+### 6.2 禁止事项
+- ❌ 禁止跳过 WAF 评估
+- ❌ 禁止过度设计（无需求不上 EKS/Multi-Region）
+- ❌ 禁止"脑补"未明确的需求
+- ❌ 禁止盲目为所有 Agentic 项目加入 RAG
+- ❌ AI 项目禁止忽略成本控制（Token 限制、模型选择）
+- ❌ 大数据项目禁止忽略数据分区和存储优化
 
-### A.2 大数据架构
-
-| 模式名称 | 适用场景 | 核心服务 | 数据规模 | 延迟 |
-|---------|---------|---------|---------|------|
-| 批量数据处理 | 离线分析、BI | S3 + Glue + Athena/Redshift | TB - PB | T+1 |
-| 实时数据处理 | IoT、日志分析 | Kinesis + Lambda + DynamoDB | 百万 TPS | 毫秒 - 秒 |
-| 数据湖 | 多源数据、ML | S3 + Lake Formation + Glue | PB - EB | 按需 |
-| 大数据计算 | 复杂 ETL、图计算 | EMR + S3 + Glue Catalog | TB - PB | 分钟 - 小时 |
-
-### A.3 AI/ML 架构
-
-| 模式名称 | 适用场景 | 核心服务 | 典型应用 | 成本模型 |
-|---------|---------|---------|---------|---------|
-| GenAI 应用 | 聊天、内容生成 | Bedrock + Lambda + DynamoDB | ChatBot、摘要 | 按 Token |
-| RAG 架构 | 知识库问答（无任务编排） | Bedrock KB + OpenSearch + S3 | 文档检索、QA | Token + 存储 |
-| AI Agentic (纯编排) | 自主任务执行、API 编排 | Bedrock Agents + Lambda + Step Functions | 工作流自动化、API 调用 | Token + 调用 |
-| AI Agentic + RAG | 知识库增强的任务执行 | Bedrock Agents + OpenSearch + Lambda + Step Functions | 专业顾问系统、企业知识库助手 | Token + 存储 + 调用 |
-| ML 训练推理 | 自定义模型 | SageMaker + S3 + ECR | 推荐系统、自定义分类 | 实例计费 |
-| 多模态 AI | 图像、语音、文档 | Bedrock + Rekognition + Textract | OCR、识别、理解 | 按请求 |
-
-### A.4 架构模式选择速查表
-
-```
-用户需求关键词 → 推荐架构模式
-
-【传统应用】
-"电商"、"Web"、"API" → Web 三层架构 / Serverless API
-"本地 IDC + 云" → 混合云
-"容器"、"微服务" → 容器化应用
-
-【大数据与分析】
-"大数据"、"分析"、"BI" → 批量数据处理 / 数据湖
-"实时"、"流数据"、"IoT" → 实时数据处理
-
-【生成式 AI / LLM】
-"聊天机器人"、"内容生成"（无文档） → GenAI 应用
-"知识库"、"文档检索"、"语义搜索" → RAG 架构（纯知识库问答）
-"任务编排"、"多步骤"、"工作流"、"API 自动化" → AI Agentic（不需要 RAG）
-"任务编排" + "知识库" → AI Agentic + RAG（知识库增强的任务系统）
-"自定义模型"、"训练" → ML 训练推理
-"图像识别"、"OCR"、"语音处理" → 多模态 AI
-
-【关键区分】
-❌ 不要盲目为所有 Agent 添加 RAG
-✅ 只在 Agent 需要查询文档/知识库时才添加 RAG
-✅ 纯任务编排/API 自动化的 Agent 不需要 RAG
-```
-
-### A.5 服务选型速查表
-
-#### AI/ML 服务选型
-
-| 需求 | 首选方案 | 替代方案 | 关键考虑 |
-|-----|---------|---------|---------|
-| 聊天机器人 | Bedrock (Claude) | SageMaker (自定义) | 成本 vs 定制化 |
-| 文档检索 | Bedrock KB | Kendra | 简单 vs 企业级 |
-| 向量存储 | OpenSearch Serverless | pgvector | 成本 vs 混合查询 |
-| 任务编排 | Bedrock Agents | LangChain (Lambda) | 托管 vs 灵活性 |
-| 模型训练 | SageMaker Training | EMR (Spark ML) | 易用 vs 复杂度 |
-| 实时推理 | SageMaker Real-time | Lambda (小模型) | 延迟 vs 成本 |
-| 批量推理 | SageMaker Batch | Lambda (异步) | 数据量 vs 简单 |
-
-#### 大数据服务选型
-
-| 需求 | 首选方案 | 替代方案 | 关键考虑 |
-|-----|---------|---------|---------|
-| 即席查询 | Athena | Redshift Spectrum | 查询频率 |
-| 数据仓库 | Redshift Serverless | Redshift | 负载稳定性 |
-| ETL | Glue | EMR | 复杂度 |
-| 实时流 | Kinesis | MSK (Kafka) | 生态兼容性 |
-| 流处理 | Kinesis Analytics | Lambda | 逻辑复杂度 |
-| 数据湖管理 | Lake Formation | 手动配置 | 治理需求 |
+### 6.3 关键认识
+- ✅ RAG 是**可选的知识库增强**，不是 Agentic 必需组件
+- ✅ 只在需要文档检索/语义搜索时才用 RAG
+- ✅ 纯任务编排/API 自动化的 Agent 不需要 RAG
+- ✅ 运维与监控是系统稳定性的**关键支撑**，不仅仅是告警
+- ✅ Agentic AI 的核心是**任务编排与自主推理**，RAG 是**可选的知识库补充**
 
 ---
 
-**文档版本:** v1.6
-**最后更新:** 2026-01-12
+## 七、后续扩展方向
+
+### 7.1 已实现功能
+- ✅ 架构图自动生成（MCP Server 集成）
+- ✅ 用户架构图识别和验证（Vision/OCR）
+- ✅ 案例学习文件检测和关联匹配
+- ✅ 写作标准参考手册
+
+### 7.2 未来增强
+- 🔄 IaC 代码生成 Skill（Terraform / CloudFormation）
+- 🔄 成本计算 Skill（AWS Pricing API 集成）
+- 🔄 架构图版本管理和历史对比
+- 🔄 案例库管理和分类
+- 🔄 知识库增强（WAF Lens、行业 Compliance）
+- 🔄 交互式设计对比（方案 A vs 方案 B）
+
+---
+
+**文档版本:** v1.7
+**最后更新:** 2026-01-18
+**维护者:** AWS 架构设计 Skill 团队
 
 ## 版本历史
 
+### v1.7 (2026-01-18)
+- ✅ 重新组织文档结构，提高可读性
+- ✅ 清理冗余内容，聚焦核心需求
+- ✅ 统一参考文档管理（references/ 目录）
+- ✅ 修复绝对路径问题，确保跨用户可移植性
+- ✅ 精简版本历史，保留关键更新记录
+
 ### v1.6 (2026-01-12)
 ⭐⭐ **重要更新: 运维监控完整性 + AI Agentic 与 RAG 关系澄清**
-
-**关键改进:**
-
-1. **运维、监控与可观测性能力强化**
-   - ✅ 在 WAF 检查清单中新增"卓越运营"完整章节
-     - 日志聚合与管理（采样策略、脱敏、保留期）
-     - 监控与告警（指标定义、告警阈值、分级响应）
-     - 分布式追踪与性能诊断（X-Ray 集成）
-     - 仪表盘与可视化要求
-     - 成本监控与异常检测
-     - 自动化运维与 On-Call 体系
-   - ✅ AI/ML 项目特有监控指标（Token 使用、推理延迟、幻觉率、数据漂移）
-   - ✅ 大数据项目特有监控指标（ETL 成功率、消费延迟、数据质量、存储成本）
-   - ✅ Design Reviewer 阶段新增"运维监控与可观测性检查"（5.4 章节）
-     - 日志、监控、告警、追踪、仪表盘、自动化的完整检查清单
-     - AI/ML 和大数据项目的特定监控要求
-
-2. **AI Agentic 与 RAG 关系澄清**
-   - ✅ **关键认识**: RAG 是可选的知识库增强，不是 Agentic 必需组件
-   - ✅ 修改架构模式选择决策树
-     - 纯 Agentic (无 RAG): API 编排、流程自动化、任务执行
-     - Agentic + RAG: 知识库增强的任务系统（可选）
-     - 纯 RAG: 知识库问答、文档检索（无任务编排）
-   - ✅ 更新模式对比表（新增"是否包含 RAG"列）
-   - ✅ 更新架构模式速查表（明确关键词区分）
-   - ✅ 更新 AI Agentic 模板
-     - 第 8 章改为"仅当需要 RAG 增强时"
-     - 新增 8.1 节判断标准（什么时候需要 RAG）
-     - 新增 8.5 节 RAG 与 Agent 的 3 种集成方式（工具型、上下文型、混合型）
-     - 关键提醒：RAG 是可选增强，不是必须部分
-
-3. **禁止事项强化**
-   - ❌ **禁止盲目为所有 Agentic 项目添加 RAG**
-   - ❌ 只在确实需要知识库检索时才包含 RAG
-   - ✅ 基于实际需求进行决策（见 8.1 判断标准）
-
-**新增文件更新:**
-- `references/waf_checklist.md`: 完整运维监控检查清单
-- `templates/design_doc_template_ai_agentic.md`: 明确 RAG 可选性
-
-**关键学习要点:**
-- Agentic AI 的核心是**任务编排与自主推理**，RAG 是**可选的知识库补充**
-- 架构模式应该基于**业务需求**，而非假设需要 RAG
-- 运维与监控是系统稳定性的**关键支撑**，不仅仅是告警
+- ✅ 运维、监控与可观测性能力强化
+- ✅ AI Agentic 与 RAG 关系澄清
+- ✅ 禁止盲目为所有 Agentic 项目添加 RAG
 
 ### v1.5 (2026-01-07)
 ⭐⭐ **重大更新: 案例学习文件支持与参考**
-
-**新增功能:**
 - ✅ 案例学习文件检测与识别
-  - 支持文件名模式识别(case study, 案例, 迁移方案等)
-  - 支持内容关键词识别
-  - 自动判定文件是否为案例学习文件
-- ✅ 结构化信息提取(从案例文件中)
-  - 项目背景: 行业、公司规模、现状基础设施
-  - 痛点分析: 问题描述、影响、严重程度
-  - AWS 解决方案: 服务组合、架构模式、配置
-  - 关键指标: 可用性、性能、流量、数据量等
-  - 预期收益: 成本节省、性能提升、业务影响
-  - 经验教训: 关键经验和最佳实践
-  - 架构图: 自动检测(Markdown 和 HTML 格式)
+- ✅ 结构化信息提取
 - ✅ 新项目与案例的关联匹配
-  - 相关性分数计算(0-100)
-  - 多维度匹配(行业、规模、痛点、功能)
-  - 相关性等级判定(高/中/低)
-  - 可复用服务提取
 - ✅ 参考加速决策流程
-  - 从案例中快速参考架构模式
-  - 提取验证过的服务组合
-  - 基于案例的成本基线预测
-  - 吸取经验教训规避风险
-
-**新增实现文件:**
-- `scripts/case_study_analyzer.py`: 案例学习分析引擎 (850+ 行)
-  - CaseStudyDetector: 案例检测器
-    - `detect()`: 通过文件名和内容检测
-    - 支持 20+ 种案例关键词(中文和英文)
-  - CaseStudyExtractor: 信息提取器
-    - `_extract_background()`: 背景信息提取
-    - `_extract_pain_points()`: 痛点提取
-    - `_extract_aws_solution()`: 方案提取
-    - `_extract_key_metrics()`: 指标提取
-    - `_extract_benefits()`: 收益提取
-    - `_extract_lessons()`: 经验提取
-    - `_detect_diagram()`: 架构图检测
-  - CaseStudyMatcher: 匹配和关联器
-    - `calculate_relevance()`: 相关性评分
-    - `extract_reusable_services()`: 可复用服务提取
-  - CaseStudyAnalyzer: 主分析器
-    - `analyze()`: 完整分析流程
-    - `match_with_project()`: 与新项目匹配
-
-**新增设计文档:**
-- 第 3.0 节: 案例学习文件处理(Case Study Analysis)
-  - 案例文件识别规则
-  - 结构化提取信息
-  - 与新项目的关联机制
-- 第 3.2.4 节: 基于案例学习文件的架构设计完整示例
-
-**关键改进:**
-- 参考加速: 相似项目可直接参考已验证的案例
-- 成本基线: 基于案例的成本数据预测新项目
-- 风险规避: 吸取案例的经验教训
-- 自动化匹配: 智能关联相关案例
-- 完整信息链: 从案例中提取背景、方案、结果的全链路
 
 ### v1.4 (2026-01-07)
 ⭐⭐ **重大更新: 架构图自动生成能力**
-
-**新增功能:**
-- ✅ 整体流程升级为 5-Step Pipeline,新增架构图生成步骤
-- ✅ 用户架构图检测与识别能力(Vision/OCR)
-- ✅ 架构蓝图自动构建(基于架构决策)
-- ✅ MCP Server 集成: awslabs-aws-diagram-mcp-server
-- ✅ 架构图与需求的一致性检查
-- ✅ 架构图文字描述自动生成
-- ✅ 两种处理路径:
-  - Case 1: 用户提供架构图 → 识别验证 → 文字描述
-  - Case 2: 用户无架构图 → 蓝图构建 → MCP 生成 → 文字描述
-
-**新增实现文件:**
-- `scripts/diagram_generator.py`: 架构图生成核心模块
-  - DiagramGenerator: 主生成器
-  - BlueprintBuilder: 蓝图构建器
-  - DiagramValidator: 一致性验证器
-  - DiagramDescriptionGenerator: 文字描述生成器
-- `scripts/mcp_diagram_client.py`: MCP Server 集成模块
-  - MCPDiagramClient: MCP 客户端
-  - DiagramGenerationOrchestrator: 编排器
-  - 完整的蓝图验证和请求处理
-
-**新增设计文档:**
-- 第 2-A 节: Architecture Diagram Generation 详细设计
-- 第 6.4 节: 架构图生成执行要点
-  - MCP Server 集成工作流
-  - 架构蓝图构建规则
-  - MCP 响应处理
-  - Design Reviewer 阶段的架构图检查
-
-**关键改进:**
-- 视觉化架构表示: 所有设计都包含生成的或用户提供的架构图
-- 自动一致性检查: 架构图与文档的内容验证
-- 降级方案: MCP Server 不可用时的文本描述备选
-- 完整的检查流程: 从架构图检测到文档集成的全链路
+- ✅ 整体流程升级为 5-Step Pipeline
+- ✅ MCP Server 集成（aws-diagram-mcp-server）
+- ✅ 架构图一致性检查
 
 ### v1.3 (2026-01-06)
 ⭐⭐ **重大更新: 大数据与 AI/ML 架构设计能力**
-
-**新增架构模式 (9 个):**
-- 批量数据处理平台 (S3 + Glue + Athena/Redshift)
-- 实时数据处理平台 (Kinesis + Lambda + DynamoDB)
-- 数据湖架构 (Lake Formation + S3 + Glue)
-- 大数据计算集群 (EMR + Spark)
-- GenAI 应用架构 (Bedrock + Lambda)
-- RAG 架构 (Bedrock KB + OpenSearch)
-- AI Agentic 系统 (Bedrock Agents + Step Functions)
-- ML 训练推理平台 (SageMaker)
-- 多模态 AI 架构 (Bedrock + Rekognition + Textract)
-
-**新增服务选型决策:**
-- AI/ML 服务决策表: LLM 推理、模型选择、向量数据库、Agent 框架、模型部署
-- 大数据服务决策表: 离线分析、ETL、实时流、流处理、数据仓库、数据湖查询
-
-**新增特殊 WAF 检查:**
-- AI 特有检查点: Token 成本控制、推理性能优化、Prompt Security、幻觉检测、MLOps
-- 大数据特有检查点: 存储成本优化、查询性能、数据一致性、数据治理、自动化
-
-**其他更新:**
-- 架构模式选择决策树 (Python 伪代码)
-- Architecture Decisioning Prompt 增加 AI/大数据特殊处理 (任务 5)
-- 附录增加架构模式速查表和服务选型速查表 (5 个速查表)
+- ✅ 新增 9 个架构模式
+- ✅ AI/ML 和大数据服务选型决策表
+- ✅ 特殊 WAF 检查（AI 和大数据）
 
 ### v1.2 (2026-01-06)
-⭐ **核心更新: Architecture Decisioning(架构决策引擎)**
-- 新增: 服务选型决策树和对比评估流程
-- 新增: AWS Well-Architected Framework 六大支柱强制检查机制
-- 新增: 服务选型完整示例(RDS vs Aurora 对比)
-- 新增: Architecture Decisioning Prompt 模板
-- 新增: WAF 检查强制执行流程和阻断级别定义
-- 新增: 复杂度评分机制防止过度设计
-- 优化: 验收标准增加架构决策质量和可追溯性要求
-- 更新: 流程图标注 WAF 评估环节
+⭐ **核心更新: Architecture Decisioning（架构决策引擎）**
+- ✅ 服务选型决策树
+- ✅ WAF 六大支柱强制检查
+- ✅ 复杂度评分机制防止过度设计
 
 ### v1.1 (2026-01-06)
-- 新增: Material Parser 对零散材料的处理能力
-- 新增: 5 大关键要素提取清单(功能需求、非功能需求、合规性、预算、流量)
-- 新增: 主动交互机制和追问优先级矩阵
-- 新增: 从会议记录到结构化数据的完整示例
-- 新增: Material Parser Prompt 模板
+- ✅ Material Parser 处理能力
+- ✅ 5 大关键要素提取清单
+- ✅ 主动交互机制
 
 ### v1.0 (初始版本)
 - 基础架构设计 Skill 需求定义
